@@ -2,33 +2,22 @@ import React from 'react';
 import './App.css';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './utils/AuthContext';
-import Welcome from './components.jsx/Welcome';
+import CareerLaunchpadDashboard from './components.jsx/CareerLaunchpadDashboard';
 import Login from './components.jsx/Login';
 import Register from './components.jsx/Register';
-import DailyLogDashboard from './components.jsx/DailyLogDashboard';
-import ProtectedRoute from './components.jsx/ProtectedRoute';
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public Welcome Landing Page */}
-          <Route path="/" element={<Welcome />} />
+          {/* Primary Career Launchpad Standard Website */}
+          <Route path="/" element={<CareerLaunchpadDashboard />} />
+          <Route path="/daily-logs" element={<CareerLaunchpadDashboard />} />
 
           {/* Auth Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-
-          {/* Protected Daily Task Dashboard */}
-          <Route
-            path="/daily-logs"
-            element={
-              <ProtectedRoute>
-                <DailyLogDashboard />
-              </ProtectedRoute>
-            }
-          />
 
           {/* Fallback Route */}
           <Route path="*" element={<Navigate to="/" replace />} />
