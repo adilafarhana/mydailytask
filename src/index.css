@@ -46,3 +46,32 @@ h1, h2, h3, h4, h5, h6, p, span, label, input, select, textarea, button, a {
 ::-webkit-scrollbar-thumb:hover {
   background: #000000;
 }
+
+/* Global Mobile Responsiveness & Utility Styles */
+html, body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+@media (max-width: 768px) {
+  /* Prevent horizontal scroll on mobile */
+  body {
+    font-size: 14px;
+  }
+
+  /* Force responsive grid layouts on mobile screens */
+  .responsive-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Make flex containers wrap cleanly */
+  .responsive-flex-wrap {
+    flex-wrap: wrap !important;
+  }
+
+  /* Adjust padding and font size for touch friendliness */
+  button, input, select, textarea {
+    min-height: 40px;
+  }
+}
+

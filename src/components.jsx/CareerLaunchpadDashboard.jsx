@@ -7,12 +7,22 @@ export default function CareerLaunchpadDashboard() {
   // Navigation active tab: 'focus' | 'vault' | 'roadmap' | 'review'
   const [activeTab, setActiveTab] = useState('focus');
 
+  // Mobile Responsiveness state
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Selected date string (YYYY-MM-DD) for Day-by-Day view
   const todayIso = new Date().toISOString().split('T')[0];
   const [selectedDateStr, setSelectedDateStr] = useState(todayIso);
-
-  // Selected history date for Page 4 previous day details
-  const [historyDetailDate, setHistoryDetailDate] = useState(todayIso);
+  const [showCalendar, setShowCalendar] = useState(true);
 
   // Format selected date for header display (e.g., "August 27, 2026")
   const formatHeaderDate = (dateStr) => {
@@ -86,8 +96,84 @@ export default function CareerLaunchpadDashboard() {
   const [selectedDetailTask, setSelectedDetailTask] = useState(null);
   const [completionPopupTask, setCompletionPopupTask] = useState(null);
   const [warningPopupTask, setWarningPopupTask] = useState(null);
+  const [isSiteOpenModalOpen, setIsSiteOpenModalOpen] = useState(true);
 
-  // Quick-Add Modal State
+
+
+  const formatSecToMinSecStr = (totalSec = 0) => {
+    const sec = Math.max(0, parseInt(totalSec, 10) || 0);
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    if (m > 0 && s > 0) return `${m} min and ${s} sec`;
+    if (m > 0) return `${m} min`;
+    return `${s} sec`;
+  };
+
+  // Notification State for Estimated Time Alerts
+  const [notifications, setNotifications] = useState(() => {
+    const saved = localStorage.getItem('clp_task_notifications_v1');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('clp_task_notifications_v1', JSON.stringify(notifications));
+  }, [notifications]);
+
+  // Web Audio API notification alert sound chime (2-tone warning ping)
+  const playNotificationSound = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+
+      // Tone 1 (A5 - 880Hz warning ping)
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(880, now);
+      gain1.gain.setValueAtTime(0.3, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.18);
+
+      // Tone 2 (E5 - 659Hz follow-up ping)
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(659.25, now + 0.12);
+      gain2.gain.setValueAtTime(0.35, now + 0.12);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.12);
+      osc2.stop(now + 0.4);
+    } catch (e) {
+      console.log('Audio playback error:', e);
+    }
+  };
+
+  const addNotification = (item) => {
+    playNotificationSound();
+    setNotifications((prev) => [item, ...prev]);
+  };
+
+  const markNotificationRead = (notifId) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notifId ? { ...n, read: true } : n))
+    );
+  };
+
+  const removeNotification = (notifId) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+  };
+
+  const clearAllNotifications = () => {
+    setNotifications([]);
+  };
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskCategory, setNewTaskCategory] = useState('skill');
@@ -130,31 +216,7 @@ export default function CareerLaunchpadDashboard() {
     ];
   });
 
-  const [newBulletText, setNewBulletText] = useState('');
-  const [newBulletProject, setNewBulletProject] = useState('');
-  const [vaultFilter, setVaultFilter] = useState('All'); // 'All' | 'Unmastered'
-  const [expandedStarId, setExpandedStarId] = useState(null);
-
-  // Page 3: Skill Roadmap & Kanban State (Clean User Data)
-  const [skillTrees] = useState(() => {
-    const saved = localStorage.getItem('clp_skill_trees_v2');
-    return saved
-      ? JSON.parse(saved)
-      : [
-          { id: 1, name: 'Next.js', level: 60, statusLabel: 'Practical', resourceUrl: 'https://nextjs.org/docs' },
-          { id: 2, name: 'Docker', level: 40, statusLabel: 'Beginner', resourceUrl: 'https://docs.docker.com' },
-          { id: 3, name: 'System Design', level: 30, statusLabel: 'Beginner', resourceUrl: 'https://github.com/donnemartin/system-design-primer' },
-          { id: 4, name: 'Laravel API', level: 80, statusLabel: 'Ready for Interview', resourceUrl: 'https://laravel.com/docs' },
-        ];
-  });
-
-  const [kanbanTasks, setKanbanTasks] = useState(() => {
-    const saved = localStorage.getItem('clp_kanban_tasks_v2');
-    return saved ? JSON.parse(saved) : [];
-  });
-
   const [newKanbanTitle, setNewKanbanTitle] = useState('');
-  const [newKanbanCategory, setNewKanbanCategory] = useState('Frontend');
 
   // Page 4: Weekly Review Goals State
   // Page: Achieving Career Goals State
@@ -189,14 +251,6 @@ export default function CareerLaunchpadDashboard() {
   useEffect(() => {
     localStorage.setItem('clp_cv_bullets_v2', JSON.stringify(cvBullets));
   }, [cvBullets]);
-
-  useEffect(() => {
-    localStorage.setItem('clp_skill_trees_v2', JSON.stringify(skillTrees));
-  }, [skillTrees]);
-
-  useEffect(() => {
-    localStorage.setItem('clp_kanban_tasks_v2', JSON.stringify(kanbanTasks));
-  }, [kanbanTasks]);
 
   useEffect(() => {
     localStorage.setItem('clp_career_goals_v3', JSON.stringify(careerGoals));
@@ -247,6 +301,32 @@ export default function CareerLaunchpadDashboard() {
         setTaskCountdownSeconds((prevSec) => {
           if (prevSec <= 1) {
             setTaskTimerIsRunning(false);
+            const targetTask = dailyTasks.find((t) => t.id === activeTaskTimerId);
+            if (targetTask && !targetTask.isCompleted) {
+              // Add header notification bell alert item
+              addNotification({
+                id: Date.now(),
+                taskId: targetTask.id,
+                taskTitle: targetTask.title,
+                estTime: targetTask.estTime,
+                message: `⚠️ Time Expired! You started the timer for '${targetTask.title}', but estimated time (${targetTask.estTime}) finished without completion. Please complete your task!`,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                read: false,
+              });
+
+              // Trigger backend Brevo SMTP email notification
+              fetch(`${API_BASE}/send-task-due-email`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  task_title: targetTask.title,
+                  email: 'adilafarhanavv1@gmail.com',
+                }),
+              }).catch(() => {});
+
+              // Show incomplete task notification popup modal
+              setWarningPopupTask(targetTask);
+            }
             setDailyTasks((prevTasks) =>
               prevTasks.map((t) =>
                 t.id === activeTaskTimerId
@@ -268,6 +348,7 @@ export default function CareerLaunchpadDashboard() {
       }, 1000);
     }
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskTimerIsRunning, activeTaskTimerId]);
 
   const startTaskTimer = (task) => {
@@ -378,6 +459,10 @@ export default function CareerLaunchpadDashboard() {
   const codingTasks = tasksForSelectedDate.filter((t) => t.type === 'coding');
   const interviewTasks = tasksForSelectedDate.filter((t) => t.type === 'interview');
 
+  const skillDone = skillTasks.filter((t) => t.isCompleted).length;
+  const codingDone = codingTasks.filter((t) => t.isCompleted).length;
+  const interviewDone = interviewTasks.filter((t) => t.isCompleted).length;
+
   // Completion Ring for Selected Date
   const totalTodayTasks = tasksForSelectedDate.length;
   const completedTodayTasks = tasksForSelectedDate.filter((t) => t.isCompleted).length;
@@ -404,27 +489,13 @@ export default function CareerLaunchpadDashboard() {
   };
   const activeStreak = calculateStreak();
 
-  // Format Seconds to Hours/Mins
+  // Format Seconds to Hours/Mins (e.g., "0h 0m" or "1h 30m")
   const formatHoursMins = (totalSec = 0) => {
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
+    const sec = Math.max(0, parseInt(totalSec, 10) || 0);
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
     return `${h}h ${m}m`;
   };
-
-  // Readiness Score
-  const masteredQuestionsCount = cvBullets.filter((b) => b.status === 'Mastered').length;
-  const totalQuestionsCount = cvBullets.length || 1;
-  const finishedKanbanCount = kanbanTasks.filter((k) => k.status === 'Completed').length;
-  const totalKanbanCount = kanbanTasks.length || 1;
-
-  const readinessScore = cvBullets.length === 0 && kanbanTasks.length === 0
-    ? 0
-    : Math.min(
-        100,
-        Math.round(
-          (masteredQuestionsCount / totalQuestionsCount) * 50 + (finishedKanbanCount / totalKanbanCount) * 50
-        )
-      );
 
   // ----------------------------------------------------
   // FULL MONTHLY CALENDAR GRID & ACTIVITY TRACKER
@@ -433,7 +504,6 @@ export default function CareerLaunchpadDashboard() {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() };
   });
-  const [calendarViewMode, setCalendarViewMode] = useState('monthly'); // 'monthly' | '7day'
 
   const shiftCalendarMonth = (offset) => {
     setCalendarYearMonth((prev) => {
@@ -541,13 +611,80 @@ export default function CareerLaunchpadDashboard() {
   };
 
   const activity7Days = getLast7Days();
-  const selectedHistoryObj = (calendarViewMode === 'monthly' ? monthlyCalendarDays.filter(Boolean) : activity7Days).find((d) => d.dateStr === historyDetailDate) || activity7Days[6];
 
   // ----------------------------------------------------
+  // Poothiri Sparkler Celebration & Sound Effect State
+  const [poothiriActive, setPoothiriActive] = useState(false);
+  const [poothiriTaskTitle, setPoothiriTaskTitle] = useState('');
+
+  // Web Audio API victory sound chime (ascending 3-tone sparkler chime)
+  const playCompletionSound = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+
+      // Note 1 (E5 - 659Hz)
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(659.25, now);
+      gain1.gain.setValueAtTime(0.25, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.2);
+
+      // Note 2 (B5 - 987Hz)
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(987.77, now + 0.1);
+      gain2.gain.setValueAtTime(0.3, now + 0.1);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.1);
+      osc2.stop(now + 0.4);
+
+      // Note 3 (E6 - 1318Hz Sparkler Shimmer)
+      const osc3 = ctx.createOscillator();
+      const gain3 = ctx.createGain();
+      osc3.type = 'triangle';
+      osc3.frequency.setValueAtTime(1318.51, now + 0.22);
+      gain3.gain.setValueAtTime(0.35, now + 0.22);
+      gain3.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+      osc3.connect(gain3);
+      gain3.connect(ctx.destination);
+      osc3.start(now + 0.22);
+      osc3.stop(now + 0.65);
+    } catch (e) {
+      console.log('Audio playback error:', e);
+    }
+  };
+
+  const triggerPoothiri = (taskTitle) => {
+    setPoothiriTaskTitle(taskTitle || 'Task Completed');
+    setPoothiriActive(true);
+    playCompletionSound();
+    setTimeout(() => {
+      setPoothiriActive(false);
+    }, 2500);
+  };
+
   // HANDLERS
   // ----------------------------------------------------
 
   const toggleTaskCompletion = (id) => {
+    const target = dailyTasks.find((t) => t.id === id);
+    const becomingCompleted = target ? !target.isCompleted : false;
+
+    if (becomingCompleted && target) {
+      triggerPoothiri(target.title);
+    }
+
     setDailyTasks((prev) => {
       const updated = prev.map((task) =>
         task.id === id ? { ...task, isCompleted: !task.isCompleted } : task
@@ -558,7 +695,6 @@ export default function CareerLaunchpadDashboard() {
 
     // Try backend sync
     try {
-      const target = dailyTasks.find((t) => t.id === id);
       if (target && typeof id === 'number' && id < 1000000) {
         fetch(`${API_BASE}/daily-tasks/${id}`, {
           method: 'PUT',
@@ -605,158 +741,240 @@ export default function CareerLaunchpadDashboard() {
     } catch (e1) {}
   };
 
-  const handleAddCvBullet = (e) => {
-    e.preventDefault();
-    if (!newBulletText.trim()) return;
-    const newEntry = {
-      id: Date.now(),
-      project: newBulletProject.trim() || 'General Project',
-      bulletText: newBulletText.trim(),
-      questions: [
-        `What key technical challenges did you solve in "${newBulletText.trim().substring(0, 30)}..."?`,
-        'How did you validate performance and ensure fault tolerance?',
-        'What would you design differently if you built this system again today?',
-      ],
-      star: {
-        situation: 'Initial baseline context and problem statement.',
-        task: 'Core technical objectives and requirements.',
-        action: 'Step-by-step implementation, architectural pattern, and code decisions.',
-        result: 'Measurable metric results and operational impact.',
-      },
-      status: 'Needs Practice',
-    };
-    setCvBullets((prev) => [newEntry, ...prev]);
-    setNewBulletText('');
-    setNewBulletProject('');
-    setExpandedStarId(newEntry.id);
-  };
-
-  const updateStarField = (bulletId, field, val) => {
-    setCvBullets((prev) =>
-      prev.map((b) => (b.id === bulletId ? { ...b, star: { ...b.star, [field]: val } } : b))
+  const handleAddInterviewTaskFromDrill = (questionTitle) => {
+    const exists = dailyTasks.some(
+      (t) => t.taskDate === selectedDateStr && t.type === 'interview' && t.title === questionTitle
     );
+
+    if (!exists) {
+      const item = {
+        id: Date.now(),
+        taskDate: selectedDateStr,
+        type: 'interview',
+        title: questionTitle,
+        estTime: '30m',
+        project: 'CV Drill',
+        isCompleted: false,
+      };
+      setDailyTasks((prev) => {
+        const updated = [...prev, item];
+        localStorage.setItem('clp_daily_tasks_v2', JSON.stringify(updated));
+        return updated;
+      });
+
+      const newNotif = {
+        id: Date.now(),
+        taskTitle: questionTitle,
+        message: 'Added question to Interview Preparation tasks! 🟠',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        type: 'add',
+      };
+      setNotifications((prev) => [newNotif, ...prev]);
+
+      try {
+        fetch(`${API_BASE}/daily-tasks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            task_date: selectedDateStr,
+            task_title: questionTitle,
+            category: 'Interview',
+            is_completed: false,
+          }),
+        });
+      } catch (e) {}
+    }
   };
-
-  const updateBulletStatus = (bulletId, status) => {
-    setCvBullets((prev) => prev.map((b) => (b.id === bulletId ? { ...b, status } : b)));
-  };
-
-  const handleMoveKanban = (taskId, targetStatus) => {
-    setKanbanTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: targetStatus } : t)));
-  };
-
-  const handleAddKanbanTask = (e) => {
-    e.preventDefault();
-    if (!newKanbanTitle.trim()) return;
-    const newTask = {
-      id: Date.now(),
-      title: newKanbanTitle.trim(),
-      category: newKanbanCategory,
-      status: 'To Do',
-    };
-    setKanbanTasks((prev) => [...prev, newTask]);
-    setNewKanbanTitle('');
-  };
-
-  const handleAddCareerGoal = (e) => {
-    e.preventDefault();
-    if (!newGoalTitle.trim()) return;
-    const newGoal = {
-      id: Date.now(),
-      title: newGoalTitle.trim(),
-      category: newGoalCategory,
-      targetDate: newGoalTargetDate || '2026-12-31',
-      progress: 10,
-      isAchieved: false,
-    };
-    setCareerGoals((prev) => [newGoal, ...prev]);
-    setNewGoalTitle('');
-    setIsAddGoalModalOpen(false);
-  };
-
-
-  const filteredBullets = cvBullets.filter((b) => {
-    if (vaultFilter === 'Unmastered') return b.status !== 'Mastered';
-    return true;
-  });
 
   return (
-    <div style={styles.appContainer}>
+    <div style={{ ...styles.appContainer, flexDirection: isMobile ? 'column' : 'row' }}>
       {/* ==================================================== */}
-      {/* LEFT NAVIGATION SIDEBAR                             */}
+      {/* NAVIGATION SIDEBAR / MOBILE NAVIGATION               */}
       {/* ==================================================== */}
-      <aside style={styles.sidebar}>
-        <div style={styles.logoSection}>
-          <span style={styles.logoIcon}>🚀</span>
-          <div>
-            <h1 style={styles.logoText}>CAREER</h1>
-            <span style={styles.logoSubtext}>LAUNCHPAD</span>
-          </div>
-        </div>
-
-        <nav style={styles.navMenu}>
-          <button
-            onClick={() => setActiveTab('focus')}
-            style={{
-              ...styles.navButton,
-              ...(activeTab === 'focus' ? styles.navButtonActive : {}),
-            }}
-          >
-            <span style={styles.navIcon}>🎯</span>
-            <span style={styles.navLabel}>TODAY'S FOCUS</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('vault')}
-            style={{
-              ...styles.navButton,
-              ...(activeTab === 'vault' ? styles.navButtonActive : {}),
-            }}
-          >
-            <span style={styles.navIcon}>❓</span>
-            <span style={styles.navLabel}>QUESTION VAULT</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('roadmap')}
-            style={{
-              ...styles.navButton,
-              ...(activeTab === 'roadmap' ? styles.navButtonActive : {}),
-            }}
-          >
-            <span style={styles.navIcon}>🗺️</span>
-            <span style={styles.navLabel}>ROADMAP</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('review')}
-            style={{
-              ...styles.navButton,
-              ...(activeTab === 'review' ? styles.navButtonActive : {}),
-            }}
-          >
-            <span style={styles.navIcon}>📊</span>
-            <span style={styles.navLabel}>WEEKLY REVIEW</span>
-          </button>
-        </nav>
-
-        <div style={styles.sidebarFooter}>
-          <div style={styles.userBadge}>
-            <span style={styles.userAvatar}>👩‍💻</span>
+      {isMobile ? (
+        <header style={mobileStyles.mobileTopHeader}>
+          <div style={styles.logoSection}>
+            <span style={styles.logoIcon}>🚀</span>
             <div>
-              <div style={styles.userName}>Adila Farhana V V</div>
-              <div style={styles.userRole}>Full Stack Engineer & Skill Master</div>
+              <h1 style={styles.logoText}>CAREER</h1>
+              <span style={styles.logoSubtext}>LAUNCHPAD</span>
+            </div>
+          </div>
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            style={mobileStyles.menuToggleBtn}
+            aria-label="Toggle Navigation Menu"
+          >
+            {mobileMenuOpen ? '✕' : '☰'}
+          </button>
+        </header>
+      ) : (
+        <aside style={styles.sidebar}>
+          <div style={styles.logoSection}>
+            <span style={styles.logoIcon}>🚀</span>
+            <div>
+              <h1 style={styles.logoText}>CAREER</h1>
+              <span style={styles.logoSubtext}>LAUNCHPAD</span>
+            </div>
+          </div>
+
+          <nav style={styles.navMenu}>
+            <button
+              onClick={() => setActiveTab('focus')}
+              style={{
+                ...styles.navButton,
+                ...(activeTab === 'focus' ? styles.navButtonActive : {}),
+              }}
+            >
+              <span style={styles.navIcon}>🎯</span>
+              <span style={styles.navLabel}>TODAY'S FOCUS</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('calendar')}
+              style={{
+                ...styles.navButton,
+                ...(activeTab === 'calendar' ? styles.navButtonActive : {}),
+              }}
+            >
+              <span style={styles.navIcon}>📅</span>
+              <span style={styles.navLabel}>CALENDAR VIEW</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('cv_drills')}
+              style={{
+                ...styles.navButton,
+                ...(activeTab === 'cv_drills' ? styles.navButtonActive : {}),
+              }}
+            >
+              <span style={styles.navIcon}>🎮</span>
+              <span style={styles.navLabel}>CV INTERVIEW DRILLS</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('relax')}
+              style={{
+                ...styles.navButton,
+                ...(activeTab === 'relax' ? styles.navButtonActive : {}),
+              }}
+            >
+              <span style={styles.navIcon}>🧘</span>
+              <span style={styles.navLabel}>MIND RELAXING</span>
+            </button>
+          </nav>
+
+          <div style={styles.sidebarFooter}>
+            <div style={styles.userBadge}>
+              <span style={styles.userAvatar}>👩‍💻</span>
+              <div>
+                <div style={styles.userName}>Adila Farhana V V</div>
+                <div style={styles.userRole}>Full Stack Engineer & Skill Master</div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      )}
+
+      {/* MOBILE DRAWER OVERLAY */}
+      {isMobile && mobileMenuOpen && (
+        <div style={mobileStyles.drawerOverlay} onClick={() => setMobileMenuOpen(false)}>
+          <div style={mobileStyles.drawerContent} onClick={(e) => e.stopPropagation()}>
+            <nav style={styles.navMenu}>
+              <button
+                onClick={() => { setActiveTab('focus'); setMobileMenuOpen(false); }}
+                style={{ ...styles.navButton, ...(activeTab === 'focus' ? styles.navButtonActive : {}) }}
+              >
+                <span style={styles.navIcon}>🎯</span>
+                <span style={styles.navLabel}>TODAY'S FOCUS</span>
+              </button>
+              <button
+                onClick={() => { setActiveTab('calendar'); setMobileMenuOpen(false); }}
+                style={{ ...styles.navButton, ...(activeTab === 'calendar' ? styles.navButtonActive : {}) }}
+              >
+                <span style={styles.navIcon}>📅</span>
+                <span style={styles.navLabel}>CALENDAR VIEW</span>
+              </button>
+              <button
+                onClick={() => { setActiveTab('cv_drills'); setMobileMenuOpen(false); }}
+                style={{ ...styles.navButton, ...(activeTab === 'cv_drills' ? styles.navButtonActive : {}) }}
+              >
+                <span style={styles.navIcon}>🎮</span>
+                <span style={styles.navLabel}>CV INTERVIEW DRILLS</span>
+              </button>
+              <button
+                onClick={() => { setActiveTab('relax'); setMobileMenuOpen(false); }}
+                style={{ ...styles.navButton, ...(activeTab === 'relax' ? styles.navButtonActive : {}) }}
+              >
+                <span style={styles.navIcon}>🧘</span>
+                <span style={styles.navLabel}>MIND RELAXING</span>
+              </button>
+            </nav>
+            <div style={styles.sidebarFooter}>
+              <div style={styles.userBadge}>
+                <span style={styles.userAvatar}>👩‍💻</span>
+                <div>
+                  <div style={styles.userName}>Adila Farhana V V</div>
+                  <div style={styles.userRole}>Full Stack Engineer & Skill Master</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </aside>
+      )}
+
+      {/* FIXED MOBILE BOTTOM NAVIGATION BAR */}
+      {isMobile && (
+        <div style={mobileStyles.bottomNavContainer}>
+          <button
+            onClick={() => setActiveTab('focus')}
+            style={{
+              ...mobileStyles.bottomNavItem,
+              color: activeTab === 'focus' ? '#4f46e5' : '#64748b',
+              fontWeight: '700',
+            }}
+          >
+            <span style={{ fontSize: '18px' }}>🎯</span>
+            <span style={{ fontSize: '11px' }}>Focus</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('calendar')}
+            style={{
+              ...mobileStyles.bottomNavItem,
+              color: activeTab === 'calendar' ? '#4f46e5' : '#64748b',
+              fontWeight: '700',
+            }}
+          >
+            <span style={{ fontSize: '18px' }}>📅</span>
+            <span style={{ fontSize: '11px' }}>Calendar</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('relax')}
+            style={{
+              ...mobileStyles.bottomNavItem,
+              color: activeTab === 'relax' ? '#4f46e5' : '#64748b',
+              fontWeight: '700',
+            }}
+          >
+            <span style={{ fontSize: '18px' }}>🧘</span>
+            <span style={{ fontSize: '11px' }}>Relax</span>
+          </button>
+
+          <button
+            onClick={() => setIsTaskModalOpen(true)}
+            style={mobileStyles.bottomNavAddBtn}
+            title="Add Task"
+          >
+            <span style={{ fontSize: '20px', color: '#ffffff', fontWeight: 'bold' }}>+</span>
+          </button>
+        </div>
+      )}
 
       {/* ==================================================== */}
       {/* MAIN CONTENT AREA                                    */}
       {/* ==================================================== */}
-      <main style={styles.mainContent}>
+      <main style={{ ...styles.mainContent, padding: isMobile ? '16px 12px 90px 12px' : '32px' }}>
         {/* TOP HEADER BAR WITH DAY-BY-DAY DATE SELECTOR */}
-        <header style={styles.headerBar}>
+        <header style={{ ...styles.headerBar, flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <div style={styles.dateSelectorRow}>
               <button onClick={() => shiftDate(-1)} style={styles.dateNavBtn}>◀ Prev</button>
@@ -775,24 +993,152 @@ export default function CareerLaunchpadDashboard() {
             </div>
 
             <h2 style={styles.headerTitle}>
-              {activeTab === 'focus' && `${formatHeaderDate(selectedDateStr).toUpperCase()} FOCUS`}
-              {activeTab === 'vault' && 'CV & INTERVIEW QUESTION VAULT'}
-              {activeTab === 'roadmap' && 'PROJECT & SKILL ROADMAP'}
-              {activeTab === 'review' && 'WEEKLY REVIEW & CONSISTENCY TRACKER'}
+              {`${formatHeaderDate(selectedDateStr).toUpperCase()} FOCUS`}
             </h2>
           </div>
 
           <div style={styles.headerRightGroup}>
+            {/* NOTIFICATION BELL ICON WITH UNREAD BADGE (MINIMIZED BUTTON SIZE) */}
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setShowNotifDropdown(!showNotifDropdown)}
+                style={{
+                  backgroundColor: showNotifDropdown ? '#e0e7ff' : '#ffffff',
+                  border: '1.5px solid #cbd5e1',
+                  borderRadius: '10px',
+                  padding: '5px 8px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  position: 'relative',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
+                }}
+                title="Task Time Notifications"
+              >
+                <span>🔔</span>
+                {notifications.filter((n) => !n.read).length > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '-5px',
+                      right: '-5px',
+                      backgroundColor: '#ef4444',
+                      color: '#ffffff',
+                      borderRadius: '10px',
+                      padding: '1px 5px',
+                      fontSize: '9px',
+                      fontWeight: '800',
+                      border: '1.5px solid #ffffff',
+                    }}
+                  >
+                    {notifications.filter((n) => !n.read).length}
+                  </span>
+                )}
+              </button>
+
+              {/* NOTIFICATION DROPDOWN POPOVER */}
+              {showNotifDropdown && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    right: 0,
+                    top: '40px',
+                    width: '320px',
+                    backgroundColor: '#ffffff',
+                    border: '1.5px solid #cbd5e1',
+                    borderRadius: '16px',
+                    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)',
+                    zIndex: 1000,
+                    padding: '14px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid #e2e8f0' }}>
+                    <h4 style={{ fontSize: '12px', fontWeight: '800', color: '#1e1b4b', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      🔔 Estimated Time Alerts ({notifications.length})
+                    </h4>
+                    {notifications.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={clearAllNotifications}
+                        style={{ border: 'none', background: 'none', color: '#ef4444', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+
+                  {notifications.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '14px 6px', color: '#64748b', fontSize: '12px', fontWeight: '600' }}>
+                      ✨ No time alerts! All tasks running on schedule.
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: '260px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {notifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          onClick={() => markNotificationRead(notif.id)}
+                          style={{
+                            backgroundColor: notif.read ? '#f8fafc' : '#fef2f2',
+                            border: notif.read ? '1px solid #e2e8f0' : '1px solid #fca5a5',
+                            borderRadius: '10px',
+                            padding: '10px 12px',
+                            position: 'relative',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '11px', fontWeight: '800', color: '#dc2626' }}>
+                              ⏱️ Task Time Expired
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '600' }}>
+                                {notif.time}
+                              </span>
+                              {/* CLOSE / DISMISS ICON (✕) */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeNotification(notif.id);
+                                }}
+                                style={{
+                                  border: 'none',
+                                  background: 'none',
+                                  color: '#94a3b8',
+                                  fontSize: '12px',
+                                  fontWeight: '800',
+                                  cursor: 'pointer',
+                                  padding: '0 2px',
+                                }}
+                                title="Dismiss notification"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                          <p style={{ fontSize: '12px', color: '#1e1b4b', fontWeight: '600', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+                            {notif.message}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Daily Completion Ring Widget */}
             <div style={styles.completionRingWidget}>
               <svg width="48" height="48" viewBox="0 0 48 48">
-                <circle cx="24" cy="24" r="18" fill="none" stroke="#1e293b" strokeWidth="4" />
+                <circle cx="24" cy="24" r="18" fill="none" stroke="#e2e8f0" strokeWidth="4" />
                 <circle
                   cx="24"
                   cy="24"
                   r="18"
                   fill="none"
-                  stroke="#10b981"
+                  stroke="#ef4444"
                   strokeWidth="4"
                   strokeDasharray="113.097"
                   strokeDashoffset={113.097 - (113.097 * completionPercentage) / 100}
@@ -823,42 +1169,83 @@ export default function CareerLaunchpadDashboard() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            {/* PERSONALIZED WELCOME BANNER FOR ADILA FARHANA V V */}
+            {/* CLEAN TASK COMPLETED CELEBRATION POPUP */}
+            <AnimatePresence>
+              {poothiriActive && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8, y: -20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.8, y: -20 }}
+                  style={{
+                    position: 'fixed',
+                    top: '24px',
+                    right: '24px',
+                    zIndex: 9999,
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    border: '1.5px solid #6ee7b7',
+                    borderRadius: '16px',
+                    padding: '12px 20px',
+                    boxShadow: '0 10px 25px rgba(16, 185, 129, 0.4)',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <div style={{ fontSize: '24px' }}>🎉</div>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: '900', color: '#ffffff' }}>
+                      Task Completed! 🎉
+                    </div>
+                    {poothiriTaskTitle && (
+                      <div style={{ fontSize: '12px', color: '#ecfdf5', fontWeight: '700', marginTop: '2px' }}>
+                        "{poothiriTaskTitle}"
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* ULTRA-SIMPLE MINIMAL GOAL STRIP */}
             <div
               style={{
-                background: 'linear-gradient(135deg, #e0e7ff 0%, #fae8ff 100%)',
-                border: '1px solid #818cf8',
-                borderRadius: '16px',
-                padding: '16px 20px',
-                marginBottom: '24px',
                 display: 'flex',
                 alignItems: 'center',
                 justify: 'space-between',
-                boxShadow: '0 4px 14px rgba(99, 102, 241, 0.1)',
-                gap: '14px',
+                backgroundColor: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '10px',
+                padding: '8px 14px',
+                marginBottom: '16px',
                 flexWrap: 'wrap',
+                gap: '8px',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <div style={{ fontSize: '36px' }}>👩‍💻</div>
-                <div>
-                  <div style={{ fontSize: '16px', fontWeight: '800', color: '#1e1b4b' }}>
-                    Welcome back, Adila Farhana V V! 👋
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#4338ca', fontWeight: '600', marginTop: '3px' }}>
-                    🎯 <strong>Personal Mission:</strong> Continuous Skill Growth, Knowledge Expansion & Landing your Dream Job!
-                  </div>
-                </div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>🎯</span> <span><strong>Goal:</strong> Land a Good Job, Master Skills & Build Projects 🚀</span>
               </div>
-              <div style={{ backgroundColor: '#ffffff', color: '#4338ca', border: '1px solid #c7d2fe', padding: '6px 14px', borderRadius: '10px', fontSize: '12px', fontWeight: '700' }}>
-                🌟 Adila's Launchpad
+
+              <div style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <span>Skill: <strong>{skillDone}/{skillTasks.length}</strong></span>
+                <span>Drills: <strong>{interviewDone}/{interviewTasks.length}</strong></span>
+                <span>Coding: <strong>{codingDone}/{codingTasks.length}</strong></span>
+                <span style={{ color: '#10b981', fontWeight: '800', backgroundColor: '#dcfce7', padding: '2px 8px', borderRadius: '6px' }}>
+                  {completionPercentage}% Done
+                </span>
               </div>
             </div>
 
             {/* TOP STATS ROW FOR SELECTED DATE */}
             <div style={styles.statsRow}>
               {/* Mini Card 1: Today's Coding Time & LeetCode Problem Solved Counter */}
-              <div style={{ ...styles.statCard, background: 'linear-gradient(135deg, #c7d2fe 0%, #a5b4fc 100%)', border: '1px solid #818cf8', boxShadow: '0 4px 16px rgba(99, 102, 241, 0.15)' }}>
+              <motion.div
+                whileHover={{ y: -4, scale: 1.015, boxShadow: '0 8px 24px rgba(99, 102, 241, 0.25)' }}
+                whileTap={{ scale: 0.985 }}
+                transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                style={{ ...styles.statCard, background: 'linear-gradient(135deg, #c7d2fe 0%, #a5b4fc 100%)', border: '1px solid #818cf8', boxShadow: '0 4px 16px rgba(99, 102, 241, 0.15)' }}
+              >
                 <div style={styles.statHeader}>
                   <span style={{ ...styles.statLabel, color: '#1e1b4b' }}>CODING TIME ({formatHeaderDate(selectedDateStr)})</span>
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -924,10 +1311,15 @@ export default function CareerLaunchpadDashboard() {
                     </button>
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Mini Card 2: Interview Drills Completed */}
-              <div style={{ ...styles.statCard, background: 'linear-gradient(135deg, #f5d0fe 0%, #f0abfc 100%)', border: '1px solid #e879f9', boxShadow: '0 4px 16px rgba(217, 70, 239, 0.15)' }}>
+              <motion.div
+                whileHover={{ y: -4, scale: 1.015, boxShadow: '0 8px 24px rgba(217, 70, 239, 0.25)' }}
+                whileTap={{ scale: 0.985 }}
+                transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                style={{ ...styles.statCard, background: 'linear-gradient(135deg, #f5d0fe 0%, #f0abfc 100%)', border: '1px solid #e879f9', boxShadow: '0 4px 16px rgba(217, 70, 239, 0.15)' }}
+              >
                 <div style={styles.statHeader}>
                   <span style={{ ...styles.statLabel, color: '#701a75' }}>INTERVIEW DRILLS COMPLETED</span>
                   <button
@@ -945,10 +1337,15 @@ export default function CareerLaunchpadDashboard() {
                     {currentDateLog.drillsCount || 0} questions
                   </span>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Mini Card 3: Active Streak */}
-              <div style={{ ...styles.statCard, background: 'linear-gradient(135deg, #fde68a 0%, #fcd34d 100%)', border: '1px solid #fbbf24', boxShadow: '0 4px 16px rgba(245, 158, 11, 0.15)' }}>
+              <motion.div
+                whileHover={{ y: -4, scale: 1.015, boxShadow: '0 8px 24px rgba(245, 158, 11, 0.25)' }}
+                whileTap={{ scale: 0.985 }}
+                transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                style={{ ...styles.statCard, background: 'linear-gradient(135deg, #fde68a 0%, #fcd34d 100%)', border: '1px solid #fbbf24', boxShadow: '0 4px 16px rgba(245, 158, 11, 0.15)' }}
+              >
                 <div style={styles.statHeader}>
                   <span style={{ ...styles.statLabel, color: '#78350f' }}>ACTIVE STREAK</span>
                   <span style={{ ...styles.fireBadge, backgroundColor: '#ffffff', color: '#b45309', border: '1px solid #f59e0b' }}>Active</span>
@@ -957,7 +1354,7 @@ export default function CareerLaunchpadDashboard() {
                   <span style={styles.statIcon}>🔥</span>
                   <span style={{ ...styles.statMainValue, color: '#78350f' }}>{activeStreak} days</span>
                 </div>
-              </div>
+              </motion.div>
             </div>
 
             {/* MAIN SECTION: 3 DAILY TASK COLUMNS FOR SELECTED DATE */}
@@ -976,8 +1373,15 @@ export default function CareerLaunchpadDashboard() {
                     skillTasks.map((task) => {
                       const isTimerActiveForThis = activeTaskTimerId === task.id && taskTimerIsRunning;
                       return (
-                        <div
+                        <motion.div
                           key={task.id}
+                          layout
+                          initial={{ opacity: 0, y: 12 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          whileHover={{ y: -3, scale: 1.01, boxShadow: '0 8px 20px rgba(99, 102, 241, 0.16)' }}
+                          whileTap={{ scale: 0.985 }}
+                          transition={{ type: 'spring', stiffness: 350, damping: 25 }}
                           style={{
                             ...styles.taskCardItemContainer,
                             opacity: task.isCompleted ? 0.6 : 1,
@@ -1063,7 +1467,7 @@ export default function CareerLaunchpadDashboard() {
                               )}
                             </div>
                           </div>
-                        </div>
+                        </motion.div>
                       );
                     })
                   )}
@@ -1094,8 +1498,15 @@ export default function CareerLaunchpadDashboard() {
                     codingTasks.map((task) => {
                       const isTimerActiveForThis = activeTaskTimerId === task.id && taskTimerIsRunning;
                       return (
-                        <div
+                        <motion.div
                           key={task.id}
+                          layout
+                          initial={{ opacity: 0, y: 12 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          whileHover={{ y: -3, scale: 1.01, boxShadow: '0 8px 20px rgba(99, 102, 241, 0.16)' }}
+                          whileTap={{ scale: 0.985 }}
+                          transition={{ type: 'spring', stiffness: 350, damping: 25 }}
                           style={{
                             ...styles.taskCardItemContainer,
                             opacity: task.isCompleted ? 0.6 : 1,
@@ -1184,7 +1595,7 @@ export default function CareerLaunchpadDashboard() {
                               )}
                             </div>
                           </div>
-                        </div>
+                        </motion.div>
                       );
                     })
                   )}
@@ -1201,11 +1612,11 @@ export default function CareerLaunchpadDashboard() {
                 </button>
               </div>
 
-              {/* COLUMN 3: 🟠 Interview Rehearsal */}
+              {/* COLUMN 3: 🟠 Interview Preparation */}
               <div style={styles.taskColumnCard}>
                 <div style={{ ...styles.columnTitleHeader, backgroundColor: '#fef3c7', padding: '6px 12px', borderRadius: '10px', borderLeft: '4px solid #f59e0b' }}>
                   <span style={styles.orangeDot}>🟠</span>
-                  <h3 style={{ ...styles.columnTitleText, color: '#78350f' }}>INTERVIEW REHEARSAL</h3>
+                  <h3 style={{ ...styles.columnTitleText, color: '#78350f' }}>INTERVIEW PREPARATION</h3>
                 </div>
 
                 <div style={styles.taskList}>
@@ -1215,8 +1626,15 @@ export default function CareerLaunchpadDashboard() {
                     interviewTasks.map((task) => {
                       const isTimerActiveForThis = activeTaskTimerId === task.id && taskTimerIsRunning;
                       return (
-                        <div
+                        <motion.div
                           key={task.id}
+                          layout
+                          initial={{ opacity: 0, y: 12 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          whileHover={{ y: -3, scale: 1.01, boxShadow: '0 8px 20px rgba(99, 102, 241, 0.16)' }}
+                          whileTap={{ scale: 0.985 }}
+                          transition={{ type: 'spring', stiffness: 350, damping: 25 }}
                           style={{
                             ...styles.taskCardItemContainer,
                             opacity: task.isCompleted ? 0.6 : 1,
@@ -1302,7 +1720,7 @@ export default function CareerLaunchpadDashboard() {
                               )}
                             </div>
                           </div>
-                        </div>
+                        </motion.div>
                       );
                     })
                   )}
@@ -1335,752 +1753,207 @@ export default function CareerLaunchpadDashboard() {
           </motion.div>
         )}
 
-
-
-        {/* PAGE 2: CV & INTERVIEW QUESTION VAULT */}
-        {activeTab === 'vault' && (
+        {/* PAGE 2: SEPARATE DEDICATED CALENDAR VIEW PAGE */}
+        {activeTab === 'calendar' && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            style={styles.vaultLayoutGrid}
           >
-            {/* LEFT / MIDDLE MAIN CONTENT AREA */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {/* TOP SECTION: RESUME BULLET IMPORTER */}
-              <div style={styles.cardBox}>
-                <h3 style={styles.cardTitle}>Resume Bullet Importer</h3>
-                <p style={styles.cardSubtext}>
-                  Add your actual CV bullet points to generate and organize mock interview questions.
-                </p>
-                <form onSubmit={handleAddCvBullet} style={styles.importerForm}>
-                  <div style={styles.formRow}>
-                    <input
-                      type="text"
-                      value={newBulletProject}
-                      onChange={(e) => setNewBulletProject(e.target.value)}
-                      placeholder="Project / Company Name (e.g. E-Commerce Backend)"
-                      style={styles.textInput}
-                    />
-                  </div>
-                  <textarea
-                    value={newBulletText}
-                    onChange={(e) => setNewBulletText(e.target.value)}
-                    placeholder='e.g., "Optimized database queries by 40% using composite indexing and Redis caching"'
-                    style={styles.importerTextarea}
-                  />
-                  <button type="submit" style={styles.primaryActionBtn}>
-                    + Import Bullet & Generate Questions
-                  </button>
-                </form>
-              </div>
+            <div
+              style={{
+                backgroundColor: '#ffffff',
+                border: '1.5px solid #cbd5e1',
+                borderRadius: '16px',
+                padding: '24px',
+                boxShadow: '0 4px 18px rgba(0, 0, 0, 0.05)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                <div>
+                  <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#1e1b4b', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    📅 Task Activity Calendar
+                  </h2>
+                  <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0 0', fontWeight: '600' }}>
+                    Click on any date to immediately switch to Today's Focus and view all tasks logged for that day.
+                  </p>
+                </div>
 
-              {/* MIDDLE SECTION: QUESTION CARDS BY PROJECT */}
-              <div style={{ marginTop: '20px' }}>
-                <h3 style={styles.sectionHeading}>Question Cards (Grouped by Project)</h3>
-                {filteredBullets.length === 0 ? (
-                  <div style={styles.emptyCardBox}>
-                    No CV questions imported yet. Use the Resume Bullet Importer above to add your first bullet!
-                  </div>
-                ) : (
-                  filteredBullets.map((bullet) => {
-                    const isExpanded = expandedStarId === bullet.id;
-                    return (
-                      <div key={bullet.id} style={styles.vaultCard}>
-                        <div style={styles.vaultCardHeader}>
-                          <div>
-                            <span style={styles.projectBadge}>{bullet.project}</span>
-                            <h4 style={styles.bulletTitleText}>"{bullet.bulletText}"</h4>
-                          </div>
-                          <div style={styles.statusBadgeGroup}>
-                            <select
-                              value={bullet.status}
-                              onChange={(e) => updateBulletStatus(bullet.id, e.target.value)}
-                              style={{
-                                ...styles.statusSelect,
-                                borderColor:
-                                  bullet.status === 'Mastered'
-                                    ? '#10b981'
-                                    : bullet.status === 'Reviewing'
-                                    ? '#f59e0b'
-                                    : '#ef4444',
-                                color:
-                                  bullet.status === 'Mastered'
-                                    ? '#10b981'
-                                    : bullet.status === 'Reviewing'
-                                    ? '#f59e0b'
-                                    : '#ef4444',
-                              }}
-                            >
-                              <option value="Needs Practice">Needs Practice</option>
-                              <option value="Reviewing">Reviewing</option>
-                              <option value="Mastered">Mastered</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        {/* Auto-suggested Questions */}
-                        <div style={styles.questionsContainer}>
-                          <span style={styles.questionsLabel}>Interview Practice Questions:</span>
-                          <ul style={styles.questionsList}>
-                            {bullet.questions.map((q, idx) => (
-                              <li key={idx} style={{ ...styles.questionItem, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>❓ {q}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => setVideoModalTask({ id: `q-${bullet.id}-${idx}`, title: q, videoUrl: bullet[`video_${idx}`] })}
-                                  style={{
-                                    backgroundColor: bullet[`video_${idx}`] ? '#10b981' : '#6366f1',
-                                    color: '#ffffff',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    padding: '4px 10px',
-                                    fontSize: '11px',
-                                    cursor: 'pointer',
-                                    fontWeight: '600',
-                                    marginLeft: '8px',
-                                    whiteSpace: 'nowrap',
-                                  }}
-                                >
-                                  📷 {bullet[`video_${idx}`] ? 'View Video' : 'Camera Record'}
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        {/* Expandable STAR Answer Drawer */}
-                        <div style={styles.starDrawerWrapper}>
-                          <button
-                            onClick={() => setExpandedStarId(isExpanded ? null : bullet.id)}
-                            style={styles.starToggleButton}
-                          >
-                            <span>{isExpanded ? '▼ Hide STAR Answer' : '▶ Expand STAR Answer Drawer'}</span>
-                            <span style={styles.starBadgeText}>STAR Framework</span>
-                          </button>
-
-                          <AnimatePresence>
-                            {isExpanded && (
-                              <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                style={styles.starContentBox}
-                              >
-                                <div style={styles.starGrid}>
-                                  <div style={styles.starField}>
-                                    <label style={styles.starLabel}>S - Situation</label>
-                                    <textarea
-                                      value={bullet.star.situation}
-                                      onChange={(e) =>
-                                        updateStarField(bullet.id, 'situation', e.target.value)
-                                      }
-                                      style={styles.starInput}
-                                    />
-                                  </div>
-                                  <div style={styles.starField}>
-                                    <label style={styles.starLabel}>T - Task</label>
-                                    <textarea
-                                      value={bullet.star.task}
-                                      onChange={(e) =>
-                                        updateStarField(bullet.id, 'task', e.target.value)
-                                      }
-                                      style={styles.starInput}
-                                    />
-                                  </div>
-                                  <div style={styles.starField}>
-                                    <label style={styles.starLabel}>A - Action</label>
-                                    <textarea
-                                      value={bullet.star.action}
-                                      onChange={(e) =>
-                                        updateStarField(bullet.id, 'action', e.target.value)
-                                      }
-                                      style={styles.starInput}
-                                    />
-                                  </div>
-                                  <div style={styles.starField}>
-                                    <label style={styles.starLabel}>R - Result</label>
-                                    <textarea
-                                      value={bullet.star.result}
-                                      onChange={(e) =>
-                                        updateStarField(bullet.id, 'result', e.target.value)
-                                      }
-                                      style={styles.starInput}
-                                    />
-                                  </div>
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            {/* RIGHT ACTION SIDEBAR */}
-            <div style={styles.rightActionSidebar}>
-              <div style={styles.cardBox}>
-                <h4 style={styles.sidebarFilterTitle}>VAULT FILTERS</h4>
-                <p style={styles.cardSubtext}>Quickly focus on unmastered questions</p>
-
-                <div style={styles.filterBtnGroup}>
+                {/* Month navigation controls */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#f1f5f9', padding: '6px 14px', borderRadius: '12px', border: '1px solid #cbd5e1' }}>
                   <button
-                    onClick={() => setVaultFilter('All')}
-                    style={{
-                      ...styles.filterTabBtn,
-                      backgroundColor: vaultFilter === 'All' ? '#6366f1' : '#1e293b',
-                      color: vaultFilter === 'All' ? '#ffffff' : '#94a3b8',
-                    }}
+                    type="button"
+                    onClick={() => shiftCalendarMonth(-1)}
+                    style={{ border: 'none', background: 'none', cursor: 'pointer', fontWeight: '800', color: '#4338ca', fontSize: '13px' }}
                   >
-                    All Questions ({cvBullets.length})
+                    ◀ Prev
                   </button>
+                  <span style={{ fontSize: '14px', fontWeight: '800', color: '#1e1b4b', minWidth: '130px', textAlign: 'center' }}>
+                    {new Date(calendarYearMonth.year, calendarYearMonth.month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase()}
+                  </span>
                   <button
-                    onClick={() => setVaultFilter('Unmastered')}
-                    style={{
-                      ...styles.filterTabBtn,
-                      backgroundColor: vaultFilter === 'Unmastered' ? '#6366f1' : '#1e293b',
-                      color: vaultFilter === 'Unmastered' ? '#ffffff' : '#94a3b8',
-                    }}
+                    type="button"
+                    onClick={() => shiftCalendarMonth(1)}
+                    style={{ border: 'none', background: 'none', cursor: 'pointer', fontWeight: '800', color: '#4338ca', fontSize: '13px' }}
                   >
-                    Unmastered Only (
-                    {cvBullets.filter((b) => b.status !== 'Mastered').length})
+                    Next ▶
                   </button>
                 </div>
               </div>
 
-              {/* Quick Summary Stat Box */}
-              <div style={{ ...styles.cardBox, marginTop: '20px' }}>
-                <h4 style={styles.sidebarFilterTitle}>MASTERY BREAKDOWN</h4>
-                <div style={styles.masteryStatRow}>
-                  <span style={{ color: '#ef4444' }}>Needs Practice:</span>
-                  <span>{cvBullets.filter((b) => b.status === 'Needs Practice').length}</span>
-                </div>
-                <div style={styles.masteryStatRow}>
-                  <span style={{ color: '#f59e0b' }}>Reviewing:</span>
-                  <span>{cvBullets.filter((b) => b.status === 'Reviewing').length}</span>
-                </div>
-                <div style={styles.masteryStatRow}>
-                  <span style={{ color: '#10b981' }}>Mastered:</span>
-                  <span>{cvBullets.filter((b) => b.status === 'Mastered').length}</span>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* PAGE 3: PROJECT & SKILL ROADMAP */}
-        {activeTab === 'roadmap' && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            style={styles.splitRoadmapGrid}
-          >
-            {/* LEFT SIDE: SKILL TREES */}
-            <div style={styles.cardBox}>
-              <h3 style={styles.cardTitle}>Skill Trees</h3>
-              <p style={styles.cardSubtext}>Target technologies & interview preparedness levels</p>
-
-              <div style={styles.skillTreeList}>
-                {skillTrees.map((skill) => (
-                  <div key={skill.id} style={styles.skillTreeItem}>
-                    <div style={styles.skillTreeHeader}>
-                      <span style={styles.skillNameText}>🔹 {skill.name}</span>
-                      <span style={styles.skillStatusBadge}>{skill.statusLabel}</span>
-                    </div>
-
-                    {/* Progress Bar (Beginner -> Practical -> Ready) */}
-                    <div style={styles.progressBarBg}>
-                      <div
-                        style={{
-                          ...styles.progressBarFill,
-                          width: `${skill.level}%`,
-                          backgroundColor:
-                            skill.level >= 80 ? '#10b981' : skill.level >= 50 ? '#3b82f6' : '#f59e0b',
-                        }}
-                      />
-                    </div>
-                    <div style={styles.progressTicksRow}>
-                      <span>Beginner</span>
-                      <span>Practical</span>
-                      <span>Ready for Interview</span>
-                    </div>
-
-                    <a
-                      href={skill.resourceUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={styles.resourceLink}
-                    >
-                      📖 Direct Cheatsheet & Tutorial Resource ↗
-                    </a>
+              {/* Day-of-week headers */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '10px', marginBottom: '10px', textAlign: 'center' }}>
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                  <div key={d} style={{ fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>
+                    {d}
                   </div>
                 ))}
               </div>
-            </div>
 
-            {/* RIGHT SIDE: PROJECT KANBAN BOARD */}
-            <div style={styles.cardBox}>
-              <div style={styles.kanbanHeaderRow}>
-                <div>
-                  <h3 style={styles.cardTitle}>Project Kanban Board</h3>
-                  <p style={styles.cardSubtext}>Organize project coding features by status</p>
-                </div>
-              </div>
+              {/* Monthly days grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '10px' }}>
+                {monthlyCalendarDays.map((cell, idx) => {
+                  if (!cell) {
+                    return <div key={`empty-${idx}`} style={{ minHeight: '75px', opacity: 0 }} />;
+                  }
+                  const isSelected = cell.dateStr === selectedDateStr;
+                  const hasTasks = cell.totalCount > 0;
 
-              {/* Add Kanban Item Form */}
-              <form onSubmit={handleAddKanbanTask} style={styles.addKanbanForm}>
-                <input
-                  type="text"
-                  value={newKanbanTitle}
-                  onChange={(e) => setNewKanbanTitle(e.target.value)}
-                  placeholder="New project task title..."
-                  style={styles.textInput}
-                />
-                <select
-                  value={newKanbanCategory}
-                  onChange={(e) => setNewKanbanCategory(e.target.value)}
-                  style={styles.selectInput}
-                >
-                  <option value="Frontend">Frontend</option>
-                  <option value="Backend">Backend</option>
-                  <option value="Bugfix">Bugfix</option>
-                  <option value="Deploy">Deploy</option>
-                </select>
-                <button type="submit" style={styles.primaryActionBtn}>
-                  + Add Card
-                </button>
-              </form>
+                  return (
+                    <div
+                      key={cell.dateStr}
+                      onClick={() => {
+                        setSelectedDateStr(cell.dateStr);
+                        setActiveTab('focus');
+                      }}
+                      style={{
+                        backgroundColor: isSelected ? '#e0e7ff' : hasTasks ? '#f0fdf4' : '#f8fafc',
+                        border: isSelected ? '2.5px solid #4f46e5' : hasTasks ? '1.5px solid #86efac' : '1px solid #cbd5e1',
+                        borderRadius: '12px',
+                        padding: '10px 8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justify: 'space-between',
+                        minHeight: '75px',
+                        cursor: 'pointer',
+                        boxShadow: isSelected ? '0 4px 14px rgba(79, 70, 229, 0.3)' : 'none',
+                        transform: isSelected ? 'scale(1.03)' : 'none',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <span style={{ fontSize: '14px', fontWeight: '800', color: isSelected ? '#4338ca' : '#0f172a' }}>
+                        {cell.dayNum}
+                      </span>
 
-              {/* 3 KANBAN COLUMNS */}
-              <div style={styles.kanbanColumnsRow}>
-                {/* Column 1: To Do */}
-                <div style={styles.kanbanCol}>
-                  <div style={styles.kanbanColHeader}>
-                    <span>TO DO</span>
-                    <span style={styles.countBadge}>
-                      {kanbanTasks.filter((k) => k.status === 'To Do').length}
-                    </span>
-                  </div>
-                  {kanbanTasks
-                    .filter((k) => k.status === 'To Do')
-                    .map((task) => (
-                      <div key={task.id} style={styles.kanbanCard}>
-                        <span style={styles.getCategoryTagStyle(task.category)}>{task.category}</span>
-                        <div style={styles.kanbanCardTitle}>{task.title}</div>
-                        <button
-                          onClick={() => handleMoveKanban(task.id, 'In Progress')}
-                          style={styles.moveBtn}
-                        >
-                          Move to In Progress ➔
-                        </button>
+                      <div style={{ textAlign: 'center' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '700', display: 'block', color: isSelected ? '#4338ca' : hasTasks ? '#15803d' : '#94a3b8' }}>
+                          {hasTasks ? `${cell.completedCount}/${cell.totalCount} Done` : '0 Tasks'}
+                        </span>
+                        {hasTasks && (
+                          <span style={{ fontSize: '9px', fontWeight: '600', color: '#64748b' }}>
+                            🎯 Click to view
+                          </span>
+                        )}
                       </div>
-                    ))}
-                </div>
-
-                {/* Column 2: In Progress */}
-                <div style={styles.kanbanCol}>
-                  <div style={styles.kanbanColHeader}>
-                    <span>IN PROGRESS</span>
-                    <span style={styles.countBadge}>
-                      {kanbanTasks.filter((k) => k.status === 'In Progress').length}
-                    </span>
-                  </div>
-                  {kanbanTasks
-                    .filter((k) => k.status === 'In Progress')
-                    .map((task) => (
-                      <div key={task.id} style={styles.kanbanCard}>
-                        <span style={styles.getCategoryTagStyle(task.category)}>{task.category}</span>
-                        <div style={styles.kanbanCardTitle}>{task.title}</div>
-                        <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
-                          <button
-                            onClick={() => handleMoveKanban(task.id, 'To Do')}
-                            style={styles.moveBtn}
-                          >
-                            ⬅ To Do
-                          </button>
-                          <button
-                            onClick={() => handleMoveKanban(task.id, 'Completed')}
-                            style={{ ...styles.moveBtn, backgroundColor: '#10b981' }}
-                          >
-                            Complete ➔
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-
-                {/* Column 3: Completed */}
-                <div style={styles.kanbanCol}>
-                  <div style={styles.kanbanColHeader}>
-                    <span>COMPLETED</span>
-                    <span style={styles.countBadge}>
-                      {kanbanTasks.filter((k) => k.status === 'Completed').length}
-                    </span>
-                  </div>
-                  {kanbanTasks
-                    .filter((k) => k.status === 'Completed')
-                    .map((task) => (
-                      <div key={task.id} style={{ ...styles.kanbanCard, opacity: 0.85 }}>
-                        <span style={styles.getCategoryTagStyle(task.category)}>{task.category}</span>
-                        <div style={{ ...styles.kanbanCardTitle, textDecoration: 'line-through' }}>
-                          {task.title}
-                        </div>
-                        <button
-                          onClick={() => handleMoveKanban(task.id, 'In Progress')}
-                          style={styles.moveBtn}
-                        >
-                          ⬅ Reopen
-                        </button>
-                      </div>
-                    ))}
-                </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* PAGE 4: WEEKLY REVIEW & CONSISTENCY TRACKER (ALL PREVIOUS DAYS HISTORY) */}
-        {activeTab === 'review' && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            style={styles.weeklyReviewGrid}
-          >
-            {/* LEFT / MAIN COLUMN */}
-            <div style={{ flex: 1 }}>
-              {/* FULL MONTHLY ACTIVITY CALENDAR TRACKER */}
-              <div style={styles.cardBox}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-                  <div>
-                    <h3 style={{ ...styles.cardTitle, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      📅 {calendarViewMode === 'monthly' ? 'Monthly Activity Calendar' : 'Activity Grid (Last 7 Days)'}
-                    </h3>
-                    <p style={styles.cardSubtext}>
-                      Visual log of study hours & tasks completed per day. Click any day to view full breakdown below.
-                    </p>
-                  </div>
+        {/* PAGE 3: GAMIFIED CV INTERVIEW DRILLS */}
+        {activeTab === 'cv_drills' && (
+          <CvInterviewDrillsSection
+            onAddInterviewTask={handleAddInterviewTaskFromDrill}
+            addedTaskTitles={dailyTasks.filter((t) => t.taskDate === selectedDateStr && t.type === 'interview').map((t) => t.title)}
+          />
+        )}
 
-                  {/* Month & View Mode Controls */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    {calendarViewMode === 'monthly' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '10px', border: '1px solid #cbd5e1' }}>
-                        <button
-                          type="button"
-                          onClick={() => shiftCalendarMonth(-1)}
-                          style={{ ...styles.dateNavBtn, padding: '4px 10px', fontSize: '11px' }}
-                        >
-                          ◀ Prev
-                        </button>
-                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#0f172a', padding: '0 8px' }}>
-                          {new Date(calendarYearMonth.year, calendarYearMonth.month, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).toUpperCase()}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => shiftCalendarMonth(1)}
-                          style={{ ...styles.dateNavBtn, padding: '4px 10px', fontSize: '11px' }}
-                        >
-                          Next ▶
-                        </button>
-                      </div>
-                    )}
+        {/* PAGE 4: DEDICATED MIND RELAXING MENU PAGE */}
+        {activeTab === 'relax' && <MindRelaxingSection />}
 
-                    {/* View Mode Toggle */}
-                    <div style={{ display: 'flex', backgroundColor: '#f1f5f9', borderRadius: '8px', padding: '2px', border: '1px solid #cbd5e1' }}>
-                      <button
-                        type="button"
-                        onClick={() => setCalendarViewMode('monthly')}
-                        style={{
-                          border: 'none',
-                          backgroundColor: calendarViewMode === 'monthly' ? '#4f46e5' : 'transparent',
-                          color: calendarViewMode === 'monthly' ? '#ffffff' : '#475569',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          padding: '5px 12px',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        📅 Month View
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCalendarViewMode('7day')}
-                        style={{
-                          border: 'none',
-                          backgroundColor: calendarViewMode === '7day' ? '#4f46e5' : 'transparent',
-                          color: calendarViewMode === '7day' ? '#ffffff' : '#475569',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          padding: '5px 12px',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        📊 7-Day View
-                      </button>
+        {/* SIMPLE SITE OPEN MOTIVATIONAL POPUP MODAL */}
+        <AnimatePresence>
+          {isSiteOpenModalOpen && (
+            <div style={styles.modalOverlay}>
+              <motion.div
+                initial={{ scale: 0.88, opacity: 0, y: -15 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.88, opacity: 0, y: -15 }}
+                style={{
+                  ...styles.modalContentCard,
+                  width: '420px',
+                  backgroundColor: '#ffffff',
+                  border: '2px solid #6366f1',
+                  boxShadow: '0 16px 36px rgba(99, 102, 241, 0.2)',
+                  padding: '22px',
+                  borderRadius: '18px',
+                  position: 'relative',
+                }}
+              >
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '24px' }}>👋</span>
+                    <div>
+                      <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#1e1b4b', margin: 0 }}>
+                        Hi Adila! Let's Start Your Daily Tasks
+                      </h3>
+                      <span style={{ fontSize: '11px', color: '#4f46e5', fontWeight: '700' }}>
+                        🎯 Goal: Land a Good Job & Master Skills!
+                      </span>
                     </div>
                   </div>
-                </div>
-
-                {/* MONTHLY CALENDAR VIEW */}
-                {calendarViewMode === 'monthly' ? (
-                  <div>
-                    {/* Day-of-Week Headers */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', marginBottom: '8px', textAlign: 'center' }}>
-                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                        <div key={d} style={{ fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>
-                          {d}
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Monthly Days Grid */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px' }}>
-                      {monthlyCalendarDays.map((cell, idx) => {
-                        if (!cell) {
-                          return <div key={`empty-${idx}`} style={{ minHeight: '60px', opacity: 0 }} />;
-                        }
-                        const isSelectedHistory = cell.dateStr === historyDetailDate;
-                        const levelStyles = [
-                          { bg: '#f1f5f9', border: '#e2e8f0', text: '#64748b' },
-                          { bg: '#dcfce7', border: '#86efac', text: '#14532d' },
-                          { bg: '#86efac', border: '#4ade80', text: '#064e3b' },
-                          { bg: '#4ade80', border: '#22c55e', text: '#052e16' },
-                          { bg: '#22c55e', border: '#16a34a', text: '#ffffff' },
-                        ];
-                        const curStyle = levelStyles[cell.level];
-
-                        return (
-                          <div
-                            key={cell.dateStr}
-                            onClick={() => setHistoryDetailDate(cell.dateStr)}
-                            style={{
-                              backgroundColor: curStyle.bg,
-                              border: isSelectedHistory ? '2px solid #4f46e5' : `1px solid ${curStyle.border}`,
-                              borderRadius: '12px',
-                              padding: '8px 6px',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              justify: 'space-between',
-                              minHeight: '64px',
-                              cursor: 'pointer',
-                              boxShadow: isSelectedHistory ? '0 4px 14px rgba(79, 70, 229, 0.3)' : 'none',
-                              transform: isSelectedHistory ? 'scale(1.04)' : 'none',
-                              transition: 'all 0.15s ease',
-                            }}
-                          >
-                            <span style={{ fontSize: '13px', fontWeight: '800', color: isSelectedHistory ? '#4f46e5' : curStyle.text }}>
-                              {cell.dayNum}
-                            </span>
-                            <span style={{ fontSize: '10px', fontWeight: '700', color: curStyle.text }}>
-                              {cell.hoursLogged}
-                            </span>
-                            <span style={{ fontSize: '9px', fontWeight: '600', color: curStyle.text, opacity: 0.85 }}>
-                              {cell.completedCount}/{cell.totalCount}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  /* 7-DAY VIEW GRID */
-                  <div style={styles.activityGridRow}>
-                    {activity7Days.map((cell) => {
-                      const isSelectedHistory = cell.dateStr === historyDetailDate;
-                      const levelStyles = [
-                        { bg: '#f1f5f9', border: '#e2e8f0', text: '#64748b' },
-                        { bg: '#dcfce7', border: '#86efac', text: '#14532d' },
-                        { bg: '#86efac', border: '#4ade80', text: '#064e3b' },
-                        { bg: '#4ade80', border: '#22c55e', text: '#052e16' },
-                        { bg: '#22c55e', border: '#16a34a', text: '#ffffff' },
-                      ];
-                      const curStyle = levelStyles[cell.level];
-                      return (
-                        <div
-                          key={cell.dateStr}
-                          onClick={() => setHistoryDetailDate(cell.dateStr)}
-                          style={{
-                            ...styles.activityDayCard,
-                            cursor: 'pointer',
-                            transform: isSelectedHistory ? 'scale(1.05)' : 'none',
-                          }}
-                        >
-                          <span
-                            style={{
-                              ...styles.activityDayName,
-                              color: isSelectedHistory ? '#4f46e5' : '#64748b',
-                            }}
-                          >
-                            {cell.dayName}
-                          </span>
-                          <div
-                            style={{
-                              ...styles.activitySquare,
-                              backgroundColor: curStyle.bg,
-                              border: isSelectedHistory ? '2px solid #4f46e5' : `1px solid ${curStyle.border}`,
-                            }}
-                          >
-                            <span style={{ fontSize: '14px', fontWeight: '800', color: curStyle.text }}>{cell.dayNum}</span>
-                          </div>
-                          <span style={{ fontSize: '11px', fontWeight: '700', color: '#4f46e5' }}>{cell.hoursLogged}</span>
-                          <span style={styles.activityTaskCount}>
-                            {cell.completedCount}/{cell.totalCount} tasks
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* COLOR INTENSITY LEGEND */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #e2e8f0' }}>
-                  <span style={{ fontSize: '11px', fontWeight: '600', color: '#64748b' }}>Activity Level:</span>
-                  {[
-                    { bg: '#f1f5f9', border: '#cbd5e1', label: '0 Tasks' },
-                    { bg: '#dcfce7', border: '#86efac', label: '1 Task' },
-                    { bg: '#86efac', border: '#4ade80', label: '2-3 Tasks' },
-                    { bg: '#4ade80', border: '#22c55e', label: '4-5 Tasks' },
-                    { bg: '#22c55e', border: '#15803d', label: 'High' },
-                  ].map((lvl, idx) => (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <div style={{ width: '14px', height: '14px', borderRadius: '4px', backgroundColor: lvl.bg, border: `1px solid ${lvl.border}` }} />
-                      <span style={{ fontSize: '10px', color: '#64748b', fontWeight: '600' }}>{lvl.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* DETAILED PREVIOUS DAY BREAKDOWN FOR SELECTED HISTORY DATE */}
-              <div style={{ ...styles.cardBox, marginTop: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={styles.cardTitle}>
-                    Previous Day Log: {formatHeaderDate(historyDetailDate)}
-                  </h3>
                   <button
-                    onClick={() => {
-                      setSelectedDateStr(historyDetailDate);
-                      setActiveTab('focus');
-                    }}
-                    style={styles.jumpToDateBtn}
+                    type="button"
+                    onClick={() => setIsSiteOpenModalOpen(false)}
+                    style={{ border: 'none', background: '#f1f5f9', color: '#64748b', fontSize: '13px', fontWeight: '800', borderRadius: '50%', width: '26px', height: '26px', cursor: 'pointer' }}
                   >
-                    Edit Tasks in Today's Focus ➔
+                    ✕
                   </button>
                 </div>
 
-                <div style={styles.historyMetricsRow}>
-                  <div style={styles.historyMetricCard}>
-                    <span style={styles.histMetricLbl}>Coding Time</span>
-                    <span style={styles.histMetricVal}>
-                      {formatHoursMins((dailyLogsMap[historyDetailDate] || {}).codingSeconds || 0)}
-                    </span>
+                {/* Simple Genuine Motivational Update Card */}
+                <div style={{ backgroundColor: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '12px', padding: '14px', marginBottom: '16px' }}>
+                  <div style={{ fontSize: '13px', color: '#166534', fontWeight: '700', lineHeight: '1.5' }}>
+                    💪 <strong>Daily Motivation Update:</strong>
                   </div>
-                  <div style={styles.historyMetricCard}>
-                    <span style={styles.histMetricLbl}>Drills Completed</span>
-                    <span style={styles.histMetricVal}>
-                      {(dailyLogsMap[historyDetailDate] || {}).drillsCount || 0} questions
-                    </span>
-                  </div>
-                  <div style={styles.historyMetricCard}>
-                    <span style={styles.histMetricLbl}>Tasks Completed</span>
-                    <span style={styles.histMetricVal}>
-                      {selectedHistoryObj ? `${selectedHistoryObj.completedCount}/${selectedHistoryObj.totalCount}` : '0/0'}
-                    </span>
-                  </div>
+                  <p style={{ fontSize: '12px', color: '#1f2937', fontWeight: '600', margin: '6px 0 0 0', lineHeight: '1.5' }}>
+                    Right now the time is <strong>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>. Today you have completed <strong>{completedTodayTasks}</strong> out of <strong>{totalTodayTasks}</strong> tasks ({formatSecToMinSecStr((currentDateLog.codingSeconds || 0) + tasksForSelectedDate.reduce((acc, t) => acc + (t.elapsedSeconds || 0), 0))} focus time). Please complete your remaining tasks and keep practicing!
+                  </p>
                 </div>
 
-                {/* Tasks List for this previous day */}
-                <div style={{ marginTop: '16px' }}>
-                  <h4 style={styles.historySectionTitle}>Tasks Logged on this Date:</h4>
-                  {!selectedHistoryObj || selectedHistoryObj.tasksList.length === 0 ? (
-                    <div style={styles.emptyHistoryNotice}>No tasks logged on this specific date.</div>
-                  ) : (
-                    <div style={styles.historyTasksList}>
-                      {selectedHistoryObj.tasksList.map((t) => (
-                        <div key={t.id} style={styles.historyTaskItem}>
-                          <span style={{ fontSize: '14px' }}>{t.isCompleted ? '✅' : '⏳'}</span>
-                          <span
-                            style={{
-                              fontSize: '13px',
-                              textDecoration: t.isCompleted ? 'line-through' : 'none',
-                              color: t.isCompleted ? '#94a3b8' : '#f8fafc',
-                            }}
-                          >
-                            {t.title}
-                          </span>
-                          <span style={styles.historyBadge}>{t.type.toUpperCase()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Notes for this previous day */}
-                {selectedHistoryObj && selectedHistoryObj.logNotes && (
-                  <div style={styles.historyNotesBox}>
-                    <h5 style={styles.historyNotesTitle}>Journal Notes:</h5>
-                    <p style={styles.historyNotesText}>"{selectedHistoryObj.logNotes}"</p>
-                  </div>
-                )}
-              </div>
-
-              {/* READINESS RADAR GAUGE METER */}
-              <div style={{ ...styles.cardBox, marginTop: '20px' }}>
-                <h3 style={styles.cardTitle}>Readiness Radar</h3>
-                <p style={styles.cardSubtext}>Overall interview & portfolio preparation meter</p>
-
-                <div style={styles.radarGaugeWrapper}>
-                  <svg width="220" height="130" viewBox="0 0 200 120">
-                    <path
-                      d="M 20 100 A 80 80 0 0 1 180 100"
-                      fill="none"
-                      stroke="#1e293b"
-                      strokeWidth="18"
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M 20 100 A 80 80 0 0 1 180 100"
-                      fill="none"
-                      stroke="#10b981"
-                      strokeWidth="18"
-                      strokeLinecap="round"
-                      strokeDasharray="251.3"
-                      strokeDashoffset={251.3 - (251.3 * readinessScore) / 100}
-                      style={{ transition: 'stroke-dashoffset 0.8s ease' }}
-                    />
-                  </svg>
-                  <div style={styles.gaugeCenterText}>
-                    <span style={styles.gaugePercentNumber}>{readinessScore}%</span>
-                    <span style={styles.gaugeStatusLabel}>READY</span>
-                  </div>
-                </div>
-
-                <div style={styles.radarMetricsRow}>
-                  <div style={styles.radarMetricCell}>
-                    <span style={styles.metricVal}>
-                      {masteredQuestionsCount}/{totalQuestionsCount}
-                    </span>
-                    <span style={styles.metricLbl}>Mastered CV Questions</span>
-                  </div>
-                  <div style={styles.radarMetricCell}>
-                    <span style={styles.metricVal}>
-                      {finishedKanbanCount}/{totalKanbanCount}
-                    </span>
-                    <span style={styles.metricLbl}>Finished Kanban Features</span>
-                  </div>
-                </div>
-              </div>
+                {/* Action Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    playCompletionSound();
+                    setIsSiteOpenModalOpen(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#4f46e5',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '11px',
+                    fontSize: '13px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
+                  }}
+                >
+                  🎯 Let's Start Today's Focus!
+                </button>
+              </motion.div>
             </div>
+          )}
+        </AnimatePresence>
 
 
-          </motion.div>
-        )}
 
         {/* ==================================================== */}
         {/* QUICK-ADD TASK MODAL                                 */}
@@ -2126,7 +1999,7 @@ export default function CareerLaunchpadDashboard() {
                     >
                       <option value="skill">🔵 Skill Learning</option>
                       <option value="coding">🟢 Project Coding</option>
-                      <option value="interview">🟠 Interview Rehearsal</option>
+                      <option value="interview">🟠 Interview Preparation</option>
                     </select>
                   </div>
 
@@ -2164,75 +2037,6 @@ export default function CareerLaunchpadDashboard() {
                     </button>
                     <button type="submit" style={styles.primaryActionBtn}>
                       Save Task
-                    </button>
-                  </div>
-                </form>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-
-        {/* ADD CAREER TARGET GOAL MODAL */}
-        <AnimatePresence>
-          {isAddGoalModalOpen && (
-            <div style={styles.modalOverlay}>
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                style={{ ...styles.modalContentCard, width: '480px' }}
-              >
-                <div style={styles.modalHeader}>
-                  <h3 style={styles.modalTitle}>🏆 Add Target Career Goal</h3>
-                  <button onClick={() => setIsAddGoalModalOpen(false)} style={styles.modalCloseBtn}>✕</button>
-                </div>
-
-                <form onSubmit={handleAddCareerGoal}>
-                  <div style={styles.fieldGroup}>
-                    <label style={styles.fieldLabel}>Goal Title / Objective *</label>
-                    <input
-                      type="text"
-                      required
-                      value={newGoalTitle}
-                      onChange={(e) => setNewGoalTitle(e.target.value)}
-                      placeholder="e.g., Become a Senior Full Stack Engineer, Land $120k Remote Role"
-                      style={styles.textInput}
-                    />
-                  </div>
-
-                  <div style={styles.fieldGroup}>
-                    <label style={styles.fieldLabel}>Goal Category</label>
-                    <select
-                      value={newGoalCategory}
-                      onChange={(e) => setNewGoalCategory(e.target.value)}
-                      style={styles.selectInput}
-                    >
-                      <option value="Career Goal">🎯 Career Goal</option>
-                      <option value="Job Target">💼 Job Target</option>
-                      <option value="Skill Mastery">⚡ Skill Mastery</option>
-                      <option value="Personal Milestone">🌟 Personal Milestone</option>
-                    </select>
-                  </div>
-
-                  <div style={styles.fieldGroup}>
-                    <label style={styles.fieldLabel}>Target Date</label>
-                    <input
-                      type="date"
-                      value={newGoalTargetDate}
-                      onChange={(e) => setNewGoalTargetDate(e.target.value)}
-                      style={styles.textInput}
-                    />
-                  </div>
-
-                  <div style={styles.modalFooterActions}>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddGoalModalOpen(false)}
-                      style={styles.cancelBtn}
-                    >
-                      Cancel
-                    </button>
-                    <button type="submit" style={{ ...styles.primaryActionBtn, backgroundColor: '#10b981' }}>
-                      Save Target Goal
                     </button>
                   </div>
                 </form>
@@ -2489,7 +2293,7 @@ const styles = {
   completionRatioText: {
     fontSize: '14px',
     fontWeight: '800',
-    color: '#16a34a',
+    color: '#ef4444',
   },
   completionSubLabel: {
     fontSize: '10px',
@@ -2509,7 +2313,7 @@ const styles = {
   },
   statsRow: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
     gap: '20px',
     marginBottom: '28px',
   },
@@ -2576,7 +2380,7 @@ const styles = {
   },
   taskColumnsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
     gap: '20px',
     marginBottom: '28px',
   },
@@ -2942,7 +2746,7 @@ const styles = {
   },
   splitRoadmapGrid: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1.3fr',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
     gap: '24px',
   },
   skillTreeList: {
@@ -3025,7 +2829,7 @@ const styles = {
   },
   kanbanColumnsRow: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
     gap: '12px',
   },
   kanbanCol: {
@@ -3098,11 +2902,13 @@ const styles = {
   },
   weeklyReviewGrid: {
     display: 'flex',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: '24px',
   },
   activityGridRow: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(75px, 1fr))',
     gap: '10px',
     marginTop: '16px',
   },
@@ -3154,7 +2960,7 @@ const styles = {
   },
   historyMetricsRow: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
     gap: '12px',
     marginTop: '16px',
   },
@@ -3709,50 +3515,17 @@ function WarningPopupModal({ task, onClose, onRecordVideo, onStartTimer, onSetRe
   );
 }
 
-function CompletionCelebrationModal({ task, onClose, formatHoursMins, careerGoals = [] }) {
+function CompletionCelebrationModal({ task, onClose }) {
   if (!task) return null;
-
-  const activeGoal = careerGoals.find((g) => !g.isAchieved) || careerGoals[0];
-  const goalTitle = activeGoal ? activeGoal.title : 'Target Career Success';
 
   return (
     <div style={styles.modalOverlay}>
-      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ ...styles.modalContentCard, width: '480px', textAlign: 'center' }}>
-        <div style={{ fontSize: '54px', marginBottom: '10px' }}>🎉</div>
-        <h3 style={{ ...styles.modalTitle, color: '#10b981', fontSize: '20px' }}>Task Completed!</h3>
-        <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '16px' }}>Great job on completing your scheduled task!</p>
+      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ ...styles.modalContentCard, width: '400px', textAlign: 'center', padding: '28px 24px' }}>
+        <div style={{ fontSize: '56px', marginBottom: '12px' }}>🎉</div>
+        <h3 style={{ ...styles.modalTitle, color: '#10b981', fontSize: '22px', margin: '0 0 6px 0', fontWeight: '800' }}>Task Completed!</h3>
+        <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px', fontWeight: '500' }}>Great job on completing your scheduled task!</p>
 
-        <div style={{ background: '#1e293b', padding: '16px', borderRadius: '10px', textAlign: 'left', marginBottom: '16px', border: '1px solid #334155' }}>
-          <div style={{ fontWeight: '600', color: '#f8fafc', marginBottom: '10px', fontSize: '15px' }}>📋 {task.title}</div>
-          <div style={{ fontSize: '13px', color: '#cbd5e1', display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span>⏱️ Estimated Time:</span>
-            <strong style={{ color: '#818cf8' }}>{task.estTime || '30m'}</strong>
-          </div>
-          <div style={{ fontSize: '13px', color: '#cbd5e1', display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span>⏱️ Actual Time Spent:</span>
-            <strong style={{ color: '#10b981' }}>{formatHoursMins ? formatHoursMins(task.elapsedSeconds || 1800) : '30m'}</strong>
-          </div>
-          {task.videoUrl && (
-            <div style={{ fontSize: '13px', color: '#10b981', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #334155' }}>
-              📹 Video Answer Response Saved ✅
-            </div>
-          )}
-        </div>
-
-        {/* GOAL-DRIVEN MOTIVATION MESSAGE CARD */}
-        <div style={{ background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%)', border: '1px solid #0ea5e9', padding: '14px', borderRadius: '10px', textAlign: 'left', marginBottom: '20px', boxShadow: '0 4px 14px rgba(14, 165, 233, 0.2)' }}>
-          <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#38bdf8', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.5px' }}>
-            🏆 Goal Milestone Progress
-          </div>
-          <div style={{ fontSize: '13px', fontWeight: '600', color: '#ffffff', marginBottom: '6px' }}>
-            Target Goal: "{goalTitle}"
-          </div>
-          <div style={{ fontSize: '12px', color: '#e0e7ff', fontStyle: 'italic', lineHeight: 1.4 }}>
-            ✨ "1 step closer! Completing your daily task '{task.title}' day by day builds real momentum towards achieving '{goalTitle}'!"
-          </div>
-        </div>
-
-        <button onClick={onClose} style={{ ...styles.primaryActionBtn, backgroundColor: '#10b981', width: '100%', padding: '12px' }}>
+        <button onClick={onClose} style={{ ...styles.primaryActionBtn, backgroundColor: '#6366f1', width: '100%', padding: '12px', fontSize: '14px', fontWeight: '700', borderRadius: '12px' }}>
           Awesome! Keep Going 🚀
         </button>
       </motion.div>
@@ -3842,7 +3615,7 @@ function TaskDetailsModal({
       ? '🔵 Skill Learning'
       : task.type === 'coding'
       ? '🟢 Project Coding'
-      : '🟠 Interview Rehearsal';
+      : '🟠 Interview Preparation';
 
   return (
     <div style={styles.modalOverlay}>
@@ -3988,3 +3761,820 @@ function TaskDetailsModal({
     </div>
   );
 }
+
+const mobileStyles = {
+  mobileTopHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 16px',
+    backgroundColor: '#ffffff',
+    borderBottom: '1px solid #e2e8f0',
+    position: 'sticky',
+    top: 0,
+    zIndex: 100,
+    boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
+  },
+  menuToggleBtn: {
+    backgroundColor: '#f1f5f9',
+    border: '1px solid #cbd5e1',
+    borderRadius: '10px',
+    width: '40px',
+    height: '40px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '20px',
+    color: '#0f172a',
+    cursor: 'pointer',
+  },
+  drawerOverlay: {
+    position: 'fixed',
+    top: '60px',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    backdropFilter: 'blur(4px)',
+    zIndex: 999,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  drawerContent: {
+    backgroundColor: '#ffffff',
+    padding: '20px 16px',
+    borderBottomLeftRadius: '20px',
+    borderBottomRightRadius: '20px',
+    boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+    maxHeight: '80vh',
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+  },
+  bottomNavContainer: {
+    position: 'fixed',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '65px',
+    backgroundColor: '#ffffff',
+    borderTop: '1px solid #e2e8f0',
+    display: 'flex',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    padding: '0 8px',
+    boxShadow: '0 -4px 20px rgba(0,0,0,0.06)',
+    zIndex: 1000,
+  },
+  bottomNavItem: {
+    background: 'none',
+    border: 'none',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '2px',
+    padding: '6px 10px',
+    borderRadius: '10px',
+    cursor: 'pointer',
+    flex: 1,
+  },
+  bottomNavAddBtn: {
+    width: '46px',
+    height: '46px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+    border: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
+    cursor: 'pointer',
+    marginTop: '-15px',
+  },
+};
+
+// ====================================================
+// 🎮 GAMIFIED CV INTERVIEW DRILLS DATA & COMPONENT
+// ====================================================
+const CV_DRILL_QUESTIONS = [
+  // CATEGORY 1: PHP & LARAVEL EXPERIENCE (Bpract Software Solutions)
+  {
+    id: 'php_1',
+    category: 'PHP & Laravel (Bpract)',
+    topic: 'MLM Architecture',
+    question: 'How did you design the MySQL schema to represent referral trees (Binary/Unilevel) and calculate multi-tier commissions efficiently without crashing the DB?',
+    talkingPoints: [
+      'Used Materialized Path (`path` e.g., 1/4/12) and Adjacency Lists for O(1) ancestor/descendant tree queries.',
+      'Batch commission calculations processed asynchronously using Laravel Queues & Database Transactions.',
+      'Indexed `parent_id`, `sponsor_id`, `path`, and `user_id` columns to guarantee fast execution under < 20ms.'
+    ]
+  },
+  {
+    id: 'php_2',
+    category: 'PHP & Laravel (Bpract)',
+    topic: 'Race Conditions & Transactions',
+    question: 'How did you handle wallet balance updates and transactions to ensure data consistency under high concurrent load?',
+    talkingPoints: [
+      'Implemented pessimistic locking (`DB::table(...)->lockForUpdate()`) wrapped inside `DB::transaction()`.',
+      'Used double-entry ledger bookkeeping records instead of direct inplace mutations.',
+      'Integrated Redis distributed locks (`Cache::lock()`) to guarantee idempotency across concurrent payment API hits.'
+    ]
+  },
+  {
+    id: 'php_3',
+    category: 'PHP & Laravel (Bpract)',
+    topic: 'Authentication & RBAC',
+    question: 'How did you configure Laravel Sanctum/Passport alongside Role-Based Access Control (RBAC) to protect sensitive administrative routes?',
+    talkingPoints: [
+      'Issued bearer tokens via Sanctum API tokens with scoped permissions.',
+      'Built custom HTTP Middleware (`CheckRolePermission`) combined with Laravel Gates/Policies.',
+      'Enforced spatie/laravel-permission for granular role/permission enforcement across admin API routes.'
+    ]
+  },
+  {
+    id: 'php_4',
+    category: 'PHP & Laravel (Bpract)',
+    topic: 'Query Optimization',
+    question: 'Can you give an example of an Eloquent query you refactored to solve an N+1 performance issue or optimize database execution times?',
+    talkingPoints: [
+      'Replaced loop queries with Eloquent eager loading (`User::with(["referrals", "wallet"])`).',
+      'Used `select()` constraints to avoid fetching heavy unused columns.',
+      'Added composite database indexes on filter columns (`created_at`, `status`, `user_id`).'
+    ]
+  },
+  {
+    id: 'php_5',
+    category: 'PHP & Laravel (Bpract)',
+    topic: 'REST APIs',
+    question: 'What standard design rules did you follow when creating RESTful APIs for communication between frontend and backend components?',
+    talkingPoints: [
+      'Standardized HTTP status codes (200 OK, 201 Created, 400 Bad Request, 401 Unauthorized, 422 Unprocessable Entity).',
+      'Used Eloquent API Resources for predictable JSON response payload formatting.',
+      'Implemented API versioning (`/api/v1/`) and FormRequest validation classes.'
+    ]
+  },
+
+  // CATEGORY 2: MERN STACK EXPERIENCE (Ipix Technologies)
+  {
+    id: 'mern_1',
+    category: 'MERN Stack (Ipix)',
+    topic: 'React State Management',
+    question: 'How did you manage dynamic data binding and complex application state across your React interfaces?',
+    talkingPoints: [
+      'Used React Hooks (`useState`, `useReducer`, `useContext`) alongside modular custom hooks.',
+      'Optimized component re-renders with `useMemo`, `useCallback`, and layout state lifting.',
+      'Synced server state efficiently with REST endpoints and local storage persistence.'
+    ]
+  },
+  {
+    id: 'mern_2',
+    category: 'MERN Stack (Ipix)',
+    topic: 'Express & Node Architecture',
+    question: 'How did you structure your Express route handlers, custom middleware, and asynchronous error handling?',
+    talkingPoints: [
+      'Followed Controller-Service-Repository pattern with separated modular router modules.',
+      'Created centralized async error handler wrapper (`asyncHandler`) to catch unhandled promise rejections.',
+      'Applied JWT authentication middleware and CORS security configuration.'
+    ]
+  },
+  {
+    id: 'mern_3',
+    category: 'MERN Stack (Ipix)',
+    topic: 'Integration & Workflows',
+    question: 'How did you debug API integration issues between Node backends and React frontends during team development?',
+    talkingPoints: [
+      'Used Postman & Chrome DevTools Network Tab for HTTP payload and header inspection.',
+      'Implemented standardized API error response schemas `{ success: false, message, errors }`.',
+      'Configured Axios interceptors for global JWT token injection and automated error toasts.'
+    ]
+  },
+  {
+    id: 'mern_4',
+    category: 'MERN Stack (Ipix)',
+    topic: 'Performance Testing',
+    question: 'What specific debugging techniques and performance tools did you use during your internship testing routines?',
+    talkingPoints: [
+      'Used React Profiler to audit expensive re-renders and component bottlenecks.',
+      'Tested REST API response benchmarks using Postman and Node memory diagnostics.',
+      'Inspected Chrome Lighthouse for CWV (LCP, CLS, INP) performance optimization.'
+    ]
+  },
+
+  // CATEGORY 3: PROJECT-SPECIFIC QUESTIONS
+  {
+    id: 'proj_1',
+    category: 'Project Deep Dives',
+    topic: 'Vehicle Marketplace - Forecasting Model',
+    question: 'What logic or algorithm did you use to build the sales/demand forecasting model in the admin dashboard?',
+    talkingPoints: [
+      'Implemented Moving Average & Linear Trend Regression algorithms on historical booking logs.',
+      'Aggregated monthly vehicle sales trends by category, brand, and pricing tier.',
+      'Computed seasonal demand multipliers to project prospective inventory requirements.'
+    ]
+  },
+  {
+    id: 'proj_2',
+    category: 'Project Deep Dives',
+    topic: 'Vehicle Marketplace - Payment Integration',
+    question: 'How did you handle payment gateway webhooks securely to update booking and order statuses reliably?',
+    talkingPoints: [
+      'Verified HMAC-SHA256 signature headers from payment gateway before processing payload.',
+      'Maintained idempotent webhook processor (`webhook_logs` DB table) to ignore duplicate events.',
+      'Used atomic DB transactions to switch booking status to `CONFIRMED` upon payment success.'
+    ]
+  },
+  {
+    id: 'proj_3',
+    category: 'Project Deep Dives',
+    topic: 'Vehicle Marketplace - Complaint Handling',
+    question: 'How was the complaint management module architected from a database status-flow perspective?',
+    talkingPoints: [
+      'Finite State Machine (FSM): `OPEN` -> `IN_REVIEW` -> `RESOLVED` / `REJECTED`.',
+      'Logged complete audit history in `complaint_history` with timestamp and admin user ID.',
+      'Triggered automated email notifications upon each state transition.'
+    ]
+  },
+  {
+    id: 'proj_4',
+    category: 'Project Deep Dives',
+    topic: 'Academic Task System - Mark Calculation',
+    question: 'How did you automate internal mark calculations scalably, and how did you handle edge cases (missing assignments, re-evaluations)?',
+    talkingPoints: [
+      'Built formula engines evaluating weights (e.g. 20% Assignment, 30% Midterm, 50% Final).',
+      'Handled null/missing entries via configurable fallback policies (zero vs excuse code).',
+      'Re-evaluation triggers automated asynchronous recalculation of affected student GPAs.'
+    ]
+  },
+  {
+    id: 'proj_5',
+    category: 'Project Deep Dives',
+    topic: 'Academic Task System - Workflow & Permissions',
+    question: 'How did the architecture support different academic roles (students, teachers, admins) with varying access permissions?',
+    talkingPoints: [
+      'Role-Based Authorization matrix for Student, Teacher, HOD, and Admin.',
+      'Scoped queries (e.g., Teachers only access enrolled courses; Students only view own grades).',
+      'Front-end route guards paired with server-side middleware enforcement.'
+    ]
+  },
+
+  // CATEGORY 4: CORE TECHNICAL & LANGUAGE DEEP DIVES
+  {
+    id: 'core_1',
+    category: 'Core Tech & Languages',
+    topic: 'MySQL vs. MongoDB',
+    question: 'Having used both MySQL and MongoDB, how do you decide between a relational model and a document-based schema for a new feature?',
+    talkingPoints: [
+      'MySQL for ACID compliance, complex relational integrity, and financial ledgers.',
+      'MongoDB for unstructured dynamic catalogs, rapid prototyping, and high-read document trees.',
+      'Evaluated query access patterns: join heavy (MySQL) vs embedded document (MongoDB).'
+    ]
+  },
+  {
+    id: 'core_2',
+    category: 'Core Tech & Languages',
+    topic: 'JavaScript ES6+ & Event Loop',
+    question: 'Explain closures, prototypal inheritance, and how Promises interact with the Node.js Event Loop under the hood.',
+    talkingPoints: [
+      'Closure: Function retains access to lexical scope variable scope even after parent execution.',
+      'Prototypal Inheritance: Objects inherit properties via `__proto__` prototype chain.',
+      'Event Loop & Promises: Microtask Queue (Promises, process.nextTick) executes BEFORE Macrotask Queue (setTimeout, setInterval).'
+    ]
+  },
+  {
+    id: 'core_3',
+    category: 'Core Tech & Languages',
+    topic: 'C & Python Memory Management',
+    question: 'How does manual memory management in C compare to automatic garbage collection in PHP or Node.js?',
+    talkingPoints: [
+      'C requires explicit `malloc()` and `free()`; risk of memory leaks and dangling pointers.',
+      'PHP / Node.js use Reference Counting & Mark-and-Sweep Garbage Collection automatically.',
+      'Manual memory gives precise low-level control; automatic GC trades minor latency overhead for safety.'
+    ]
+  },
+  {
+    id: 'core_4',
+    category: 'Core Tech & Languages',
+    topic: 'Git Collaboration',
+    question: 'Walk me through your team\'s Git workflow—how do you handle feature branches, code reviews, and resolving merge conflicts?',
+    talkingPoints: [
+      'Git Flow / Feature Branching: `main` ➔ `develop` ➔ `feature/feature-name`.',
+      'Pull Requests require peer review and passing automated CI build tests before merging.',
+      'Conflicts resolved locally via `git rebase develop` or interactive merge resolution.'
+    ]
+  }
+];
+
+const CvInterviewDrillsSection = ({ onAddInterviewTask, addedTaskTitles = [] }) => {
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [revealedIds, setRevealedIds] = useState([]);
+  const [addedIds, setAddedIds] = useState([]);
+
+  const categories = [
+    'ALL',
+    'PHP & Laravel (Bpract)',
+    'MERN Stack (Ipix)',
+    'Project Deep Dives',
+    'Core Tech & Languages'
+  ];
+
+  const filteredQuestions = selectedCategory === 'ALL'
+    ? CV_DRILL_QUESTIONS
+    : CV_DRILL_QUESTIONS.filter((q) => q.category === selectedCategory);
+
+  const handleCardClick = (q) => {
+    // Toggle reveal
+    setRevealedIds((prev) =>
+      prev.includes(q.id) ? prev.filter((item) => item !== q.id) : [...prev, q.id]
+    );
+
+    // Track added
+    if (!addedIds.includes(q.id)) {
+      setAddedIds((prev) => [...prev, q.id]);
+    }
+
+    // Call parent handler to add into Column 3: INTERVIEW PREPARATION tasks
+    if (onAddInterviewTask) {
+      onAddInterviewTask(q.question);
+    }
+  };
+
+  const addedCount = addedIds.length || addedTaskTitles.length;
+  const totalCount = CV_DRILL_QUESTIONS.length;
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+      {/* HEADER GAMIFIED SCORE BAR */}
+      <div style={{ backgroundColor: '#ffffff', border: '1.5px solid #cbd5e1', borderRadius: '16px', padding: '18px', marginBottom: '20px', boxShadow: '0 4px 14px rgba(0,0,0,0.04)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 style={{ fontSize: '17px', fontWeight: '900', color: '#1e1b4b', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              🎮 CV-Based Technical Interview Drills
+            </h3>
+            <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0 0', fontWeight: '600' }}>
+              Click any question card to automatically add it into your <strong>Interview Preparation</strong> tasks!
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: '#fef3c7', padding: '8px 14px', borderRadius: '12px', border: '1.5px solid #f59e0b' }}>
+            <span style={{ fontSize: '20px' }}>🟠</span>
+            <div>
+              <span style={{ fontSize: '10px', fontWeight: '800', color: '#78350f', display: 'block' }}>ADDED TO PREPARATION</span>
+              <span style={{ fontSize: '14px', fontWeight: '900', color: '#b45309' }}>
+                {addedCount} / {totalCount} Drills
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Category Filters */}
+        <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap' }}>
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setSelectedCategory(cat)}
+              style={{
+                backgroundColor: selectedCategory === cat ? '#6366f1' : '#f1f5f9',
+                color: selectedCategory === cat ? '#ffffff' : '#475569',
+                border: selectedCategory === cat ? 'none' : '1px solid #cbd5e1',
+                borderRadius: '20px',
+                padding: '6px 14px',
+                fontSize: '12px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* QUESTIONS GRID */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}>
+        {filteredQuestions.map((q) => {
+          const isRevealed = revealedIds.includes(q.id);
+          const isAdded = addedIds.includes(q.id) || addedTaskTitles.includes(q.question);
+
+          return (
+            <motion.div
+              key={q.id}
+              onClick={() => handleCardClick(q)}
+              whileHover={{ y: -4, scale: 1.01, boxShadow: '0 10px 24px rgba(245, 158, 11, 0.2)' }}
+              whileTap={{ scale: 0.985 }}
+              transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+              style={{
+                backgroundColor: '#ffffff',
+                border: isAdded ? '2px solid #f59e0b' : '1.5px solid #cbd5e1',
+                borderRadius: '16px',
+                padding: '18px',
+                boxShadow: isAdded ? '0 4px 14px rgba(245, 158, 11, 0.15)' : '0 4px 12px rgba(0,0,0,0.03)',
+                display: 'flex',
+                flexDirection: 'column',
+                justify: 'space-between',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '10px', fontWeight: '800', color: '#6366f1', backgroundColor: '#e0e7ff', padding: '3px 8px', borderRadius: '6px' }}>
+                    {q.category}
+                  </span>
+                  <span style={{ fontSize: '11px', fontWeight: '800', color: '#b45309', backgroundColor: '#fef3c7', padding: '3px 8px', borderRadius: '6px' }}>
+                    📌 {q.topic}
+                  </span>
+                </div>
+
+                <h4 style={{ fontSize: '13.5px', fontWeight: '800', color: '#0f172a', margin: '0 0 12px 0', lineHeight: '1.45' }}>
+                  {q.question}
+                </h4>
+
+                {isRevealed && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}
+                  >
+                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#78350f', marginBottom: '6px' }}>
+                      💡 Key Talking Points & Model Answer:
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '11px', color: '#451a03', fontWeight: '600', lineHeight: '1.5' }}>
+                      {q.talkingPoints.map((pt, i) => (
+                        <li key={i} style={{ marginBottom: '4px' }}>{pt}</li>
+                      ))}
+                    </ul>
+                  </motion.div>
+                )}
+              </div>
+
+              {/* CARD STATUS BADGE */}
+              <div style={{
+                marginTop: '12px',
+                padding: '8px 12px',
+                borderRadius: '10px',
+                backgroundColor: isAdded ? '#fef3c7' : '#f1f5f9',
+                color: isAdded ? '#b45309' : '#64748b',
+                border: isAdded ? '1px solid #fde68a' : '1px solid #cbd5e1',
+                fontSize: '11.5px',
+                fontWeight: '800',
+                display: 'flex',
+                alignItems: 'center',
+                justify: 'center',
+                gap: '6px',
+                textAlign: 'center',
+              }}>
+                {isAdded
+                  ? '🟠 Added to Interview Preparation! (Click to toggle answer)'
+                  : '➕ Click card to add to Interview Preparation tasks'}
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+};
+
+// ====================================================
+// 🧩 SUDOKU MINI-GAME & MIND RELAXING COMPONENT
+// ====================================================
+const MindRelaxingSection = () => {
+  // Pre-configured valid Sudoku Puzzles
+  const SUDOKU_PUZZLES = [
+    {
+      initial: [
+        [5, 3, 0, 0, 7, 0, 0, 0, 0],
+        [6, 0, 0, 1, 9, 5, 0, 0, 0],
+        [0, 9, 8, 0, 0, 0, 0, 6, 0],
+        [8, 0, 0, 0, 6, 0, 0, 0, 3],
+        [4, 0, 0, 8, 0, 3, 0, 0, 1],
+        [7, 0, 0, 0, 2, 0, 0, 0, 6],
+        [0, 6, 0, 0, 0, 0, 2, 8, 0],
+        [0, 0, 0, 4, 1, 9, 0, 0, 5],
+        [0, 0, 0, 0, 8, 0, 0, 7, 9],
+      ],
+      solution: [
+        [5, 3, 4, 6, 7, 8, 9, 1, 2],
+        [6, 7, 2, 1, 9, 5, 3, 4, 8],
+        [1, 9, 8, 3, 4, 2, 5, 6, 7],
+        [8, 5, 9, 7, 6, 1, 4, 2, 3],
+        [4, 2, 6, 8, 5, 3, 7, 9, 1],
+        [7, 1, 3, 9, 2, 4, 8, 5, 6],
+        [9, 6, 1, 5, 3, 7, 2, 8, 4],
+        [2, 8, 7, 4, 1, 9, 6, 3, 5],
+        [3, 4, 5, 2, 8, 6, 1, 7, 9],
+      ]
+    },
+    {
+      initial: [
+        [0, 0, 0, 2, 6, 0, 7, 0, 1],
+        [6, 8, 0, 0, 7, 0, 0, 9, 0],
+        [1, 9, 0, 0, 0, 4, 5, 0, 0],
+        [8, 2, 0, 1, 0, 0, 0, 4, 0],
+        [0, 0, 4, 6, 0, 2, 9, 0, 0],
+        [0, 5, 0, 0, 0, 3, 0, 2, 8],
+        [0, 0, 9, 3, 0, 0, 0, 7, 4],
+        [0, 4, 0, 0, 5, 0, 0, 3, 6],
+        [7, 0, 3, 0, 1, 8, 0, 0, 0],
+      ],
+      solution: [
+        [4, 3, 5, 2, 6, 9, 7, 8, 1],
+        [6, 8, 2, 5, 7, 1, 4, 9, 3],
+        [1, 9, 7, 8, 3, 4, 5, 6, 2],
+        [8, 2, 6, 1, 9, 5, 3, 4, 7],
+        [3, 7, 4, 6, 8, 2, 9, 1, 5],
+        [9, 5, 1, 7, 4, 3, 6, 2, 8],
+        [5, 1, 9, 3, 2, 6, 8, 7, 4],
+        [2, 4, 8, 9, 5, 7, 1, 3, 6],
+        [7, 6, 3, 4, 1, 8, 2, 5, 9],
+      ]
+    }
+  ];
+
+  const [puzzleIndex, setPuzzleIndex] = useState(0);
+  const [grid, setGrid] = useState(() => JSON.parse(JSON.stringify(SUDOKU_PUZZLES[0].initial)));
+  const [selectedCell, setSelectedCell] = useState(null); // [r, c]
+  const [statusMsg, setStatusMsg] = useState('');
+  const [breathPhase, setBreathPhase] = useState('🫁 Inhale (4s)');
+  const [isBreathingActive, setIsBreathingActive] = useState(false);
+
+  const initialPuzzle = SUDOKU_PUZZLES[puzzleIndex].initial;
+  const solutionPuzzle = SUDOKU_PUZZLES[puzzleIndex].solution;
+
+  const handleCellClick = (r, c) => {
+    setSelectedCell([r, c]);
+  };
+
+  const handleNumberInput = (num) => {
+    if (!selectedCell) return;
+    const [r, c] = selectedCell;
+    if (initialPuzzle[r][c] !== 0) return; // Fixed clue cell
+
+    setGrid((prev) => {
+      const copy = JSON.parse(JSON.stringify(prev));
+      copy[r][c] = num;
+      return copy;
+    });
+    setStatusMsg('');
+  };
+
+  const newSudokuGame = () => {
+    const nextIdx = (puzzleIndex + 1) % SUDOKU_PUZZLES.length;
+    setPuzzleIndex(nextIdx);
+    setGrid(JSON.parse(JSON.stringify(SUDOKU_PUZZLES[nextIdx].initial)));
+    setSelectedCell(null);
+    setStatusMsg('✨ New Sudoku game loaded!');
+  };
+
+  const checkSudokuSolution = () => {
+    let isCorrect = true;
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (grid[r][c] === 0 || grid[r][c] !== solutionPuzzle[r][c]) {
+          isCorrect = false;
+          break;
+        }
+      }
+    }
+    if (isCorrect) {
+      setStatusMsg('🎉 Congratulations! You solved the Sudoku puzzle!');
+    } else {
+      setStatusMsg('⚠️ Some numbers are incorrect or missing. Keep trying!');
+    }
+  };
+
+  // Keyboard input for Sudoku
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!selectedCell) return;
+      const num = parseInt(e.key, 10);
+      if (!isNaN(num) && num >= 1 && num <= 9) {
+        handleNumberInput(num);
+      } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') {
+        handleNumberInput(0);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedCell, grid]);
+
+  // Box Breathing Guide Timer
+  useEffect(() => {
+    if (!isBreathingActive) return;
+    const phases = ['🫁 Inhale (4s)', '⏸️ Hold (4s)', '🌬️ Exhale (4s)', '⏸️ Hold (4s)'];
+    let idx = 0;
+    const interval = setInterval(() => {
+      idx = (idx + 1) % phases.length;
+      setBreathPhase(phases[idx]);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [isBreathingActive]);
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '20px' }}>
+        {/* CARD 1: SUDOKU GAME */}
+        <div style={{ backgroundColor: '#ffffff', border: '1.5px solid #cbd5e1', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 14px rgba(0,0,0,0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div>
+              <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#1e1b4b', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                🧩 Sudoku Puzzle
+              </h3>
+              <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>
+                Fill 1-9 in each row, column & 3x3 block
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={newSudokuGame}
+              style={{
+                backgroundColor: '#4f46e5',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '6px 12px',
+                fontSize: '11px',
+                fontWeight: '800',
+                cursor: 'pointer',
+              }}
+            >
+              🔄 New Game
+            </button>
+          </div>
+
+          {/* 9x9 Sudoku Board */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(9, 1fr)',
+              border: '2px solid #334155',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              maxWidth: '340px',
+              margin: '0 auto',
+            }}
+          >
+            {grid.map((row, r) =>
+              row.map((val, c) => {
+                const isClue = initialPuzzle[r][c] !== 0;
+                const isSelected = selectedCell && selectedCell[0] === r && selectedCell[1] === c;
+                const borderRight = (c + 1) % 3 === 0 && c < 8 ? '2px solid #334155' : '1px solid #cbd5e1';
+                const borderBottom = (r + 1) % 3 === 0 && r < 8 ? '2px solid #334155' : '1px solid #cbd5e1';
+
+                return (
+                  <div
+                    key={`${r}-${c}`}
+                    onClick={() => handleCellClick(r, c)}
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '14px',
+                      fontWeight: isClue ? '900' : '700',
+                      color: isClue ? '#0f172a' : '#4f46e5',
+                      backgroundColor: isSelected
+                        ? '#c7d2fe'
+                        : isClue
+                        ? '#f1f5f9'
+                        : '#ffffff',
+                      borderRight,
+                      borderBottom,
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    }}
+                  >
+                    {val !== 0 ? val : ''}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Number Pad Selection (1 to 9 & Clear) */}
+          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginTop: '14px', flexWrap: 'wrap' }}>
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+              <button
+                key={num}
+                type="button"
+                onClick={() => handleNumberInput(num)}
+                style={{
+                  width: '30px',
+                  height: '30px',
+                  borderRadius: '6px',
+                  border: '1px solid #c7d2fe',
+                  backgroundColor: '#e0e7ff',
+                  color: '#4338ca',
+                  fontWeight: '800',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                }}
+              >
+                {num}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => handleNumberInput(0)}
+              style={{
+                borderRadius: '6px',
+                border: '1px solid #fca5a5',
+                backgroundColor: '#fef2f2',
+                color: '#ef4444',
+                fontWeight: '800',
+                fontSize: '11px',
+                padding: '0 8px',
+                cursor: 'pointer',
+              }}
+            >
+              Clear ✕
+            </button>
+          </div>
+
+          {statusMsg && (
+            <div style={{ textAlign: 'center', fontSize: '12px', fontWeight: '700', color: '#1e1b4b', marginTop: '10px' }}>
+              {statusMsg}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={checkSudokuSolution}
+            style={{
+              width: '100%',
+              backgroundColor: '#10b981',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '8px',
+              fontSize: '12px',
+              fontWeight: '800',
+              cursor: 'pointer',
+              marginTop: '12px',
+            }}
+          >
+            ✓ Check Sudoku Solution
+          </button>
+        </div>
+
+        {/* CARD 2: MIND RELAXING BOX BREATHING */}
+        <div style={{ backgroundColor: '#ffffff', border: '1.5px solid #cbd5e1', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 14px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div>
+            <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#1e1b4b', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              🫁 Box Breathing Relaxer
+            </h3>
+            <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 16px 0', fontWeight: '600' }}>
+              Reduce study burnout & restore energy with guided 4-second box breathing.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '200px' }}>
+              <motion.div
+                animate={{ scale: isBreathingActive ? [1, 1.35, 1.35, 1] : 1 }}
+                transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut' }}
+                style={{
+                  width: '110px',
+                  height: '110px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #a5b4fc 0%, #6366f1 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff',
+                  fontWeight: '800',
+                  fontSize: '13px',
+                  boxShadow: '0 10px 25px rgba(99, 102, 241, 0.35)',
+                  textAlign: 'center',
+                  padding: '8px',
+                }}
+              >
+                {isBreathingActive ? breathPhase : 'Start Box Breathing'}
+              </motion.div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsBreathingActive(!isBreathingActive)}
+            style={{
+              width: '100%',
+              backgroundColor: isBreathingActive ? '#ef4444' : '#10b981',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '10px',
+              fontWeight: '800',
+              cursor: 'pointer',
+              fontSize: '13px',
+            }}
+          >
+            {isBreathingActive ? '⏹️ Stop Breathing Guide' : '▶ Start Breathing Exercise'}
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
