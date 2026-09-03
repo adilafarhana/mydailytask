@@ -3,8 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import CountdownTimerWidget from './CountdownTimerWidget';
 import UnifiedTaskManager from './UnifiedTaskManager';
 import MonthlyCalendarView from './MonthlyCalendarView';
-
-const API_BASE = 'http://127.0.0.1:8000/api';
+import apiClient from '../utils/apiClient';
 
 const INSPIRATIONAL_QUOTES = [
   { text: "Consistency is what transforms average into excellence.", author: "Anonymous" },
@@ -58,18 +57,15 @@ export default function DailyLogDashboard() {
     setError(null);
     try {
       try {
-        const userRes = await fetch(`${API_BASE}/user-profile`);
-        const userData = await userRes.json();
-        if (userData.user) setUser(userData.user);
+        const userRes = await apiClient.get('/user-profile');
+        if (userRes.data.user) setUser(userRes.data.user);
       } catch (e1) {}
 
       let logsRes;
       try {
-        logsRes = await fetch(`${API_BASE}/daily-tasks`);
-      } catch (e1) {
-        logsRes = await fetch('http://localhost:8000/api/daily-tasks');
-      }
-      const logsData = await logsRes.json();
+        logsRes = await apiClient.get('/daily-tasks');
+      } catch (e1) {}
+      const logsData = logsRes?.data || { data: [] };
       if (logsData.data && Array.isArray(logsData.data)) {
         setLogs(logsData.data);
       }
@@ -129,18 +125,14 @@ export default function DailyLogDashboard() {
     setFormError('');
 
     try {
-      const url = editingLog
-        ? `${API_BASE}/daily-tasks/${editingLog.id}`
-        : `${API_BASE}/daily-tasks`;
-      const method = editingLog ? 'PUT' : 'POST';
+      let res;
+      if (editingLog) {
+        res = await apiClient.put(`/daily-tasks/${editingLog.id}`, formData);
+      } else {
+        res = await apiClient.post('/daily-tasks', formData);
+      }
 
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await res.json();
+      const data = res.data;
       if (data.data) {
         if (editingLog) {
           setLogs((prev) => prev.map((l) => (l.id === editingLog.id ? data.data : l)));
@@ -165,7 +157,7 @@ export default function DailyLogDashboard() {
     setLogs((prev) => prev.filter((l) => l.id !== id));
 
     try {
-      await fetch(`${API_BASE}/daily-tasks/${id}`, { method: 'DELETE' });
+      await apiClient.delete(`/daily-tasks/${id}`);
     } catch (err) {
       console.warn('Log deleted.');
     }

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const API_BASE = 'http://127.0.0.1:8000/api';
+import apiClient from '../utils/apiClient';
 
 export default function UnifiedTaskManager({ selectedDateStr, onSelectDate }) {
   const [items, setItems] = useState([]);
@@ -36,14 +35,8 @@ export default function UnifiedTaskManager({ selectedDateStr, onSelectDate }) {
     } catch (e) {}
 
     try {
-      let res;
-      try {
-        res = await fetch(`${API_BASE}/unified-daily-items?target_date=${targetDate}`);
-      } catch (e) {
-        res = await fetch(`http://localhost:8000/api/unified-daily-items?target_date=${targetDate}`);
-      }
-
-      const data = await res.json();
+      let res = await apiClient.get(`/unified-daily-items?target_date=${targetDate}`);
+      const data = res.data;
       if (data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
         // Merge backend data with local data
         const combined = [...data.data];
@@ -121,13 +114,8 @@ export default function UnifiedTaskManager({ selectedDateStr, onSelectDate }) {
     setInputTitle('');
 
     try {
-      const res = await fetch(`${API_BASE}/unified-daily-items`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
+      const res = await apiClient.post('/unified-daily-items', payload);
+      const data = res.data;
       if (data.status === 'success' && data.data) {
         const finalItems = updatedList.map((item) => (item.id === tempId ? data.data : item));
         updateAndSaveItems(finalItems);
@@ -160,10 +148,7 @@ export default function UnifiedTaskManager({ selectedDateStr, onSelectDate }) {
     }
 
     try {
-      await fetch(`${API_BASE}/unified-daily-items/${itemId}/toggle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
+      await apiClient.post(`/unified-daily-items/${itemId}/toggle`);
     } catch (err) {
       console.warn('API status toggle error, retained local optimistic change.');
     }
@@ -179,9 +164,7 @@ export default function UnifiedTaskManager({ selectedDateStr, onSelectDate }) {
     }
 
     try {
-      await fetch(`${API_BASE}/unified-daily-items/${itemId}`, {
-        method: 'DELETE',
-      });
+      await apiClient.delete(`/unified-daily-items/${itemId}`);
     } catch (err) {
       console.warn('API delete error.');
     }

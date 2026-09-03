@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import apiClient from '../utils/apiClient';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function NewSkillUpgradeSection({ selectedDateStr }) {
@@ -31,13 +32,8 @@ export default function NewSkillUpgradeSection({ selectedDateStr }) {
 
     // 1. Fetch from new_skills API
     try {
-      let res;
-      try {
-        res = await fetch('http://127.0.0.1:8000/api/new-skills');
-      } catch (e) {
-        res = await fetch('http://localhost:8000/api/new-skills');
-      }
-      const data = await res.json();
+      let res = await apiClient.get('/new-skills');
+      const data = res.data;
       if (data.skills && Array.isArray(data.skills)) {
         const filteredNewSkills = data.skills.filter((item) => {
           const itemDate = item.target_date ? item.target_date.split('T')[0] : '';
@@ -63,13 +59,8 @@ export default function NewSkillUpgradeSection({ selectedDateStr }) {
 
     // 2. Fetch from daily_logs API (for logs registered as tech learned)
     try {
-      let resLogs;
-      try {
-        resLogs = await fetch('http://127.0.0.1:8000/api/daily-logs');
-      } catch (e) {
-        resLogs = await fetch('http://localhost:8000/api/daily-logs');
-      }
-      const logsData = await resLogs.json();
+      let resLogs = await apiClient.get('/daily-logs');
+      const logsData = resLogs.data;
       if (logsData.data && Array.isArray(logsData.data)) {
         const filteredLogs = logsData.data.filter((item) => {
           const logDate = item.log_date ? item.log_date.split('T')[0] : '';
@@ -112,13 +103,8 @@ export default function NewSkillUpgradeSection({ selectedDateStr }) {
 
     if (skill.rawId) {
       try {
-        let res;
-        try {
-          res = await fetch(`http://127.0.0.1:8000/api/new-skills/${skill.rawId}`);
-        } catch (e) {
-          res = await fetch(`http://localhost:8000/api/new-skills/${skill.rawId}`);
-        }
-        const data = await res.json();
+        let res = await apiClient.get(`/new-skills/${skill.rawId}`);
+        const data = res.data;
         if (data.skill) {
           setSelectedSkillDetail({
             ...data.skill,
@@ -160,22 +146,9 @@ export default function NewSkillUpgradeSection({ selectedDateStr }) {
 
     // Save exclusively to new_skills table API
     try {
-      let res;
-      try {
-        res = await fetch('http://127.0.0.1:8000/api/new-skills', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      } catch (e) {
-        res = await fetch('http://localhost:8000/api/new-skills', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      }
+      let res = await apiClient.post('/new-skills', payload);
 
-      const resData = await res.json();
+      const resData = res.data;
       if (resData.skill) {
         createdSkillObj = {
           id: `new-${resData.skill.id}`,
@@ -214,7 +187,7 @@ export default function NewSkillUpgradeSection({ selectedDateStr }) {
 
     if (item.rawId) {
       try {
-        await fetch(`http://127.0.0.1:8000/api/new-skills/${item.rawId}`, { method: 'DELETE' });
+        await apiClient.delete(`/new-skills/${item.rawId}`);
       } catch (e) {}
     }
   };

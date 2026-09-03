@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import apiClient from '../utils/apiClient';
 
 export default function CVSkillTracker({ selectedDateStr }) {
   const [skills, setSkills] = useState([]);
@@ -31,13 +32,8 @@ export default function CVSkillTracker({ selectedDateStr }) {
     setLoading(true);
     setErrorMsg('');
     try {
-      let res;
-      try {
-        res = await fetch(`http://127.0.0.1:8000/api/cv-skills?date=${targetDate}`);
-      } catch (e1) {
-        res = await fetch(`http://localhost:8000/api/cv-skills?date=${targetDate}`);
-      }
-      const data = await res.json();
+      let res = await apiClient.get(`/cv-skills?date=${targetDate}`);
+      const data = res.data;
       if (data.skills) {
         setSkills(data.skills);
       }
@@ -57,13 +53,8 @@ export default function CVSkillTracker({ selectedDateStr }) {
     setSelectedSkillDetail(skill);
 
     try {
-      let res;
-      try {
-        res = await fetch(`http://127.0.0.1:8000/api/cv-skills/${skill.id}`);
-      } catch (e1) {
-        res = await fetch(`http://localhost:8000/api/cv-skills/${skill.id}`);
-      }
-      const data = await res.json();
+      let res = await apiClient.get(`/cv-skills/${skill.id}`);
+      const data = res.data;
       if (data.skill) {
         setSelectedSkillDetail(data.skill);
       }
@@ -93,23 +84,10 @@ export default function CVSkillTracker({ selectedDateStr }) {
     let newCreatedSkill = null;
 
     try {
-      let res;
-      try {
-        res = await fetch('http://127.0.0.1:8000/api/cv-skills', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newSkillPayload),
-        });
-      } catch (e1) {
-        res = await fetch('http://localhost:8000/api/cv-skills', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newSkillPayload),
-        });
-      }
+      let res = await apiClient.post('/cv-skills', newSkillPayload);
 
-      if (res && res.ok) {
-        const data = await res.json();
+      if (res && res.status === 200) {
+        const data = res.data;
         if (data.skill) {
           newCreatedSkill = data.skill;
         }
@@ -142,21 +120,7 @@ export default function CVSkillTracker({ selectedDateStr }) {
     );
 
     try {
-      let res;
-      try {
-        res = await fetch('http://127.0.0.1:8000/api/cv-skills/toggle', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ skill_id: skill.id, mastery_status: nextStatus }),
-        });
-      } catch (e1) {
-        res = await fetch('http://localhost:8000/api/cv-skills/toggle', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ skill_id: skill.id, mastery_status: nextStatus }),
-        });
-      }
-      await res.json();
+      await apiClient.post('/cv-skills/toggle', { skill_id: skill.id, mastery_status: nextStatus });
     } catch (err) {
       console.warn('Backend updated.');
     }
@@ -168,9 +132,7 @@ export default function CVSkillTracker({ selectedDateStr }) {
     setSkills((prev) => prev.filter((s) => s.id !== skillId));
 
     try {
-      await fetch(`http://127.0.0.1:8000/api/cv-skills/${skillId}`, {
-        method: 'DELETE',
-      });
+      await apiClient.delete(`/cv-skills/${skillId}`);
     } catch (err) {
       console.warn('Skill deleted.');
     }

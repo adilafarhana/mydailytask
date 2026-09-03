@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import apiClient from '../utils/apiClient';
 import MonthlyCalendarView from './MonthlyCalendarView';
 
 const getWeekDays = () => {
@@ -82,8 +83,8 @@ export default function DailyLearningPlanner({ selectedDateStr, onSelectDate }) 
     try {
       // 1. Fetch CV Skills
       try {
-        const skillsRes = await fetch('http://127.0.0.1:8000/api/cv-skills');
-        const skillsData = await skillsRes.json();
+        const skillsRes = await apiClient.get('/cv-skills');
+        const skillsData = skillsRes.data;
         if (skillsData.skills) {
           setCvSkillsList(skillsData.skills);
         }
@@ -94,11 +95,11 @@ export default function DailyLearningPlanner({ selectedDateStr, onSelectDate }) 
       // 2. Fetch Daily Tasks from dedicated daily_tasks table
       let tasksRes;
       try {
-        tasksRes = await fetch('http://127.0.0.1:8000/api/daily-tasks');
+        tasksRes = await apiClient.get('/daily-tasks');
       } catch (e1) {
-        tasksRes = await fetch('http://localhost:8000/api/daily-tasks');
+        // Fallback or error logging
       }
-      const data = await tasksRes.json();
+      const data = tasksRes?.data || { data: [] };
       if (data.data && Array.isArray(data.data)) {
         const mapped = data.data.map((item) => ({
           id: item.id,
@@ -183,19 +184,10 @@ export default function DailyLearningPlanner({ selectedDateStr, onSelectDate }) 
     try {
       let res;
       try {
-        res = await fetch('http://127.0.0.1:8000/api/daily-tasks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+        res = await apiClient.post('/daily-tasks', payload);
       } catch (e1) {
-        res = await fetch('http://localhost:8000/api/daily-tasks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
       }
-      const data = await res.json();
+      const data = res?.data || {};
       if (data.data?.id) {
         createdId = data.data.id;
       }
@@ -231,12 +223,8 @@ export default function DailyLearningPlanner({ selectedDateStr, onSelectDate }) 
     );
 
     try {
-      await fetch(`http://127.0.0.1:8000/api/daily-tasks/${taskId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          is_completed: nextState,
-        }),
+      await apiClient.put(`/daily-tasks/${taskId}`, {
+        is_completed: nextState,
       });
     } catch (err) {
       console.warn('Backend task updated.');
@@ -249,9 +237,7 @@ export default function DailyLearningPlanner({ selectedDateStr, onSelectDate }) 
     setDailyTasks((prev) => prev.filter((t) => t.id !== taskId));
 
     try {
-      await fetch(`http://127.0.0.1:8000/api/daily-tasks/${taskId}`, {
-        method: 'DELETE',
-      });
+      await apiClient.delete(`/daily-tasks/${taskId}`);
     } catch (err) {
       console.warn('Task deleted.');
     }

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const API_BASE = 'http://127.0.0.1:8000/api';
+import apiClient, { getMediaUrl } from '../utils/apiClient';
 
 export default function CareerLaunchpadDashboard() {
   // Navigation active tab: 'focus' | 'vault' | 'roadmap' | 'review'
@@ -315,13 +314,9 @@ export default function CareerLaunchpadDashboard() {
               });
 
               // Trigger backend Brevo SMTP email notification
-              fetch(`${API_BASE}/send-task-due-email`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  task_title: targetTask.title,
-                  email: 'adilafarhanavv1@gmail.com',
-                }),
+              apiClient.post('/send-task-due-email', {
+                task_title: targetTask.title,
+                email: 'adilafarhanavv1@gmail.com',
               }).catch(() => {});
 
               // Show incomplete task notification popup modal
@@ -394,14 +389,36 @@ export default function CareerLaunchpadDashboard() {
     });
   };
 
-  const handleSaveTaskVideo = (taskId, videoUrl) => {
-    setDailyTasks((prev) => {
-      const updated = prev.map((t) =>
-        t.id === taskId ? { ...t, videoUrl, videoRecordedAt: new Date().toISOString() } : t
-      );
-      localStorage.setItem('clp_daily_tasks_v2', JSON.stringify(updated));
-      return updated;
-    });
+  const handleSaveTaskVideo = async (taskId, videoFile, existingUrl = null) => {
+    if (videoFile) {
+      try {
+        const formData = new FormData();
+        formData.append('video', videoFile, videoFile.name || 'video.webm');
+        const res = await apiClient.post(`/daily-tasks/${taskId}/upload-video`, formData);
+        if (res.data.success) {
+          const videoUrl = res.data.video_url;
+          setDailyTasks((prev) => {
+            const updated = prev.map((t) =>
+              t.id === taskId ? { ...t, videoUrl, videoRecordedAt: new Date().toISOString() } : t
+            );
+            localStorage.setItem('clp_daily_tasks_v2', JSON.stringify(updated));
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.error('Failed to upload video:', err.response?.data || err);
+        const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message || 'Unknown error';
+        alert(`Failed to upload video: ${errorMsg}. Please check your connection or file size.`);
+      }
+    } else if (existingUrl) {
+      setDailyTasks((prev) => {
+        const updated = prev.map((t) =>
+          t.id === taskId ? { ...t, videoUrl: existingUrl, videoRecordedAt: new Date().toISOString() } : t
+        );
+        localStorage.setItem('clp_daily_tasks_v2', JSON.stringify(updated));
+        return updated;
+      });
+    }
   };
 
   const handleDeleteTaskVideo = (taskId) => {
@@ -417,9 +434,9 @@ export default function CareerLaunchpadDashboard() {
   // Backend Sync if available (preserves local task state)
   const loadBackendData = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/daily-tasks`);
-      if (res.ok) {
-        const json = await res.json();
+      const res = await apiClient.get('/daily-tasks');
+      if (res.status === 200) {
+        const json = res.data;
         if (json.data && Array.isArray(json.data) && json.data.length > 0) {
           const savedLocal = localStorage.getItem('clp_daily_tasks_v2');
           const localTasks = savedLocal ? JSON.parse(savedLocal) : [];
@@ -696,20 +713,32 @@ export default function CareerLaunchpadDashboard() {
     // Try backend sync
     try {
       if (target && typeof id === 'number' && id < 1000000) {
-        fetch(`${API_BASE}/daily-tasks/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ is_completed: !target.isCompleted }),
-        });
+        apiClient.put(`/daily-tasks/${id}`, { is_completed: !target.isCompleted });
       }
     } catch (e) {}
   };
 
-  const handleAddDailyTask = (e) => {
+  const handleAddDailyTask = async (e) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
+
+    let assignedId = Date.now();
+    try {
+      const res = await apiClient.post('/daily-tasks', {
+        task_date: selectedDateStr,
+        task_title: newTaskTitle.trim(),
+        category: newTaskCategory === 'skill' ? 'Skill' : newTaskCategory === 'interview' ? 'Interview' : 'Coding',
+        is_completed: false,
+      });
+      if (res.data && res.data.data && res.data.data.id) {
+        assignedId = res.data.data.id;
+      }
+    } catch (e1) {
+      console.error('Failed to create task on backend:', e1.response?.data || e1);
+    }
+
     const item = {
-      id: Date.now(),
+      id: assignedId,
       taskDate: selectedDateStr,
       type: newTaskCategory,
       title: newTaskTitle.trim(),
@@ -717,38 +746,39 @@ export default function CareerLaunchpadDashboard() {
       project: newTaskProject.trim(),
       isCompleted: false,
     };
+
     setDailyTasks((prev) => {
       const updated = [...prev, item];
       localStorage.setItem('clp_daily_tasks_v2', JSON.stringify(updated));
       return updated;
     });
+
     setNewTaskTitle('');
     setNewTaskProject('');
     setIsTaskModalOpen(false);
-
-    // Backend sync
-    try {
-      fetch(`${API_BASE}/daily-tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          task_date: selectedDateStr,
-          task_title: item.title,
-          category: newTaskCategory === 'skill' ? 'Skill' : newTaskCategory === 'interview' ? 'Interview' : 'Coding',
-          is_completed: false,
-        }),
-      });
-    } catch (e1) {}
   };
 
-  const handleAddInterviewTaskFromDrill = (questionTitle) => {
+  const handleAddInterviewTaskFromDrill = async (questionTitle) => {
     const exists = dailyTasks.some(
       (t) => t.taskDate === selectedDateStr && t.type === 'interview' && t.title === questionTitle
     );
 
     if (!exists) {
+      let assignedId = Date.now();
+      try {
+        const res = await apiClient.post('/daily-tasks', {
+          task_date: selectedDateStr,
+          task_title: questionTitle,
+          category: 'Interview',
+          is_completed: false,
+        });
+        if (res.data && res.data.data && res.data.data.id) {
+          assignedId = res.data.data.id;
+        }
+      } catch (e) {}
+
       const item = {
-        id: Date.now(),
+        id: assignedId,
         taskDate: selectedDateStr,
         type: 'interview',
         title: questionTitle,
@@ -756,6 +786,7 @@ export default function CareerLaunchpadDashboard() {
         project: 'CV Drill',
         isCompleted: false,
       };
+
       setDailyTasks((prev) => {
         const updated = [...prev, item];
         localStorage.setItem('clp_daily_tasks_v2', JSON.stringify(updated));
@@ -770,19 +801,6 @@ export default function CareerLaunchpadDashboard() {
         type: 'add',
       };
       setNotifications((prev) => [newNotif, ...prev]);
-
-      try {
-        fetch(`${API_BASE}/daily-tasks`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            task_date: selectedDateStr,
-            task_title: questionTitle,
-            category: 'Interview',
-            is_completed: false,
-          }),
-        });
-      } catch (e) {}
     }
   };
 
@@ -3260,7 +3278,9 @@ function VideoAnswerModal({ task, onClose, onSaveVideo }) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSec, setRecordingSec] = useState(0);
   const [recordedBlobUrl, setRecordedBlobUrl] = useState(task.videoUrl || null);
+  const [recordedBlob, setRecordedBlob] = useState(null);
   const [uploadedFileUrl, setUploadedFileUrl] = useState(null);
+  const [uploadedFile, setUploadedFile] = useState(null);
   const [cameraError, setCameraError] = useState(null);
 
   const videoPreviewRef = React.useRef(null);
@@ -3297,6 +3317,7 @@ function VideoAnswerModal({ task, onClose, onSaveVideo }) {
       recorder.onstop = () => {
         const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
         const url = URL.createObjectURL(blob);
+        setRecordedBlob(blob);
         setRecordedBlobUrl(url);
       };
       recorder.start(100);
@@ -3327,15 +3348,19 @@ function VideoAnswerModal({ task, onClose, onSaveVideo }) {
     const file = e.target.files[0];
     if (file) {
       const url = URL.createObjectURL(file);
+      setUploadedFile(file);
       setUploadedFileUrl(url);
       setRecordedBlobUrl(url);
     }
   };
 
   const handleSave = () => {
+    const fileToUpload = recordedBlob || uploadedFile;
     const finalUrl = recordedBlobUrl || uploadedFileUrl;
-    if (finalUrl) {
-      onSaveVideo(task.id, finalUrl);
+    if (fileToUpload) {
+      onSaveVideo(task.id, fileToUpload);
+    } else if (finalUrl) {
+      onSaveVideo(task.id, null, finalUrl);
     }
     onClose();
   };
@@ -3554,7 +3579,7 @@ function WatchVideoModal({ task, onClose, onReRecord, onDeleteVideo }) {
 
         <div style={{ margin: '16px 0', textAlign: 'center' }}>
           <video
-            src={task.videoUrl}
+            src={getMediaUrl(task.videoUrl)}
             controls
             autoPlay
             style={{ width: '100%', borderRadius: '12px', maxHeight: '360px', background: '#000', border: '1px solid #334155' }}
@@ -3693,7 +3718,7 @@ function TaskDetailsModal({
             {task.videoUrl ? (
               <div>
                 <video
-                  src={task.videoUrl}
+                  src={getMediaUrl(task.videoUrl)}
                   controls
                   style={{ width: '100%', borderRadius: '8px', maxHeight: '240px', background: '#000', border: '1px solid #334155' }}
                 />

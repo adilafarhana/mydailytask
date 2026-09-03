@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import UnifiedTaskManager from './UnifiedTaskManager';
 
-const API_BASE = 'http://127.0.0.1:8000/api';
+import apiClient from '../utils/apiClient';
+
 
 export default function Welcome() {
   // State for Yesterday's Tasks & Skills (Defaulted to Mon, 24 Aug tasks from database)
@@ -34,8 +35,8 @@ export default function Welcome() {
     const yesterdayDate = '2026-08-24';
     try {
       // Try fetching yesterday's skills from backend
-      const resSkills = await fetch(`${API_BASE}/new-skills`);
-      const dataSkills = await resSkills.json();
+      const resSkills = await apiClient.get('/new-skills');
+      const dataSkills = resSkills.data;
       if (dataSkills.skills && Array.isArray(dataSkills.skills)) {
         const matching = dataSkills.skills.filter((s) => {
           const sDate = s.target_date ? s.target_date.split('T')[0] : '';
